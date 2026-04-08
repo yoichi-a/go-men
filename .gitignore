@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Flutter
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/.metadata
+
+# Python
+backend/__pycache__/
+backend/.venv/
+backend/venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.env
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
