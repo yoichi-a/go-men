@@ -1,0 +1,3984 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  runApp(const GoMenApp());
+}
+
+Future<void> copyText(
+  BuildContext context,
+  String text, {
+  String label = 'コピーしました',
+}) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(label)),
+  );
+}
+
+String formatDateTime(String isoString) {
+  try {
+    final dt = DateTime.parse(isoString).toLocal();
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$y/$m/$d $h:$min';
+  } catch (_) {
+    return isoString;
+  }
+}
+
+String extractConsultTheme(String title) {
+  const prefix = '相談 / ';
+  if (title.startsWith(prefix)) {
+    return title.substring(prefix.length).trim();
+  }
+  return '';
+}
+
+List<String> uniquePreserveOrder(List<String> items) {
+  final seen = <String>{};
+  final result = <String>[];
+
+  for (final item in items) {
+    final trimmed = item.trim();
+    if (trimmed.isEmpty) continue;
+    if (seen.add(trimmed)) {
+      result.add(trimmed);
+    }
+  }
+
+  return result;
+}
+
+String buildTrendHeadline(List<SavedResultItem> items) {
+  if (items.isEmpty) {
+    return 'まだこの相手との相談履歴はありません。';
+  }
+
+  final themes = uniquePreserveOrder(
+    items
+        .map((item) => extractConsultTheme(item.title))
+        .where((item) => item.isNotEmpty)
+        .toList(),
+  );
+
+  final latest = items.first;
+
+  if (themes.isNotEmpty) {
+    final themeText = themes.take(2).join('・');
+    return '最近は「$themeText」で流れがこじれやすいです。直近では「${latest.subtitle}」が提案されています。';
+  }
+
+  return '最近はこの相手との送信前チェックが続いています。直近では「${latest.subtitle}」が提案されています。';
+}
+
+List<String> buildTrendBullets(List<SavedResultItem> items) {
+  if (items.isEmpty) {
+    return [];
+  }
+
+  final bullets = <String>[];
+  final themes = uniquePreserveOrder(
+    items
+        .map((item) => extractConsultTheme(item.title))
+        .where((item) => item.isNotEmpty)
+        .toList(),
+  );
+
+  bullets.add('直近${items.length}件の記録を踏まえて次の提案を出します。');
+
+  if (themes.isNotEmpty) {
+    bullets.add('最近の相談テーマ: ${themes.take(3).join(' / ')}');
+  }
+
+  bullets.add('直近の提案: ${items.first.subtitle}');
+
+  if (items.length >= 2) {
+    bullets.add('同じ相手との流れを踏まえて、今回も悪化しにくい返し方を優先します。');
+  }
+
+  return bullets.take(3).toList();
+}
+
+class GoMenApp extends StatelessWidget {
+  const GoMenApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Go-men',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF6F8FB),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+        ),
+      ),
+      builder: (context, child) {
+        return _AppViewport(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+      home: const HomeScreen(),
+    );
+  }
+
+}
+
+const double kAppMaxWidth = 460;
+
+class _AppViewport extends StatelessWidget {
+  const _AppViewport({
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFFEFF3F8),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kAppMaxWidth),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF6F8FB),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class RelationshipProfile {
+  const RelationshipProfile({
+    required this.id,
+    required this.displayName,
+    required this.relationType,
+    required this.sensitiveTo,
+    required this.worksWellWith,
+    required this.distancePreference,
+    required this.commonConflicts,
+    required this.avoidWords,
+    required this.notes,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String displayName;
+  final String relationType;
+  final String sensitiveTo;
+  final String worksWellWith;
+  final String distancePreference;
+  final String commonConflicts;
+  final String avoidWords;
+  final String notes;
+  final String createdAt;
+
+  String get relationLabel {
+    switch (relationType) {
+      case 'couple':
+        return '恋人・パートナー';
+      case 'friend':
+        return '友人';
+      case 'parent_child':
+        return '親子';
+      default:
+        return '未設定';
+    }
+  }
+
+  String toProfileContext() {
+    return '''
+相手の名前・呼び名: $displayName
+関係性: $relationLabel
+傷つきやすい言い方: ${sensitiveTo.isEmpty ? '未設定' : sensitiveTo}
+通りやすい伝え方: ${worksWellWith.isEmpty ? '未設定' : worksWellWith}
+距離感の傾向: ${distancePreference.isEmpty ? '未設定' : distancePreference}
+よく揉めるテーマ: ${commonConflicts.isEmpty ? '未設定' : commonConflicts}
+避けたいワード: ${avoidWords.isEmpty ? '未設定' : avoidWords}
+補足メモ: ${notes.isEmpty ? '未設定' : notes}
+'''.trim();
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'displayName': displayName,
+      'relationType': relationType,
+      'sensitiveTo': sensitiveTo,
+      'worksWellWith': worksWellWith,
+      'distancePreference': distancePreference,
+      'commonConflicts': commonConflicts,
+      'avoidWords': avoidWords,
+      'notes': notes,
+      'createdAt': createdAt,
+    };
+  }
+
+  factory RelationshipProfile.fromMap(Map<String, dynamic> map) {
+    return RelationshipProfile(
+      id: map['id'] as String,
+      displayName: map['displayName'] as String,
+      relationType: map['relationType'] as String,
+      sensitiveTo: map['sensitiveTo'] as String? ?? '',
+      worksWellWith: map['worksWellWith'] as String? ?? '',
+      distancePreference: map['distancePreference'] as String? ?? '',
+      commonConflicts: map['commonConflicts'] as String? ?? '',
+      avoidWords: map['avoidWords'] as String? ?? '',
+      notes: map['notes'] as String? ?? '',
+      createdAt: map['createdAt'] as String,
+    );
+  }
+}
+
+class ConsultationDraft {
+  const ConsultationDraft({
+    this.relationType,
+    this.relationLabel,
+    this.theme,
+    this.themeAnswers = const [],
+    this.currentStatus,
+    this.emotionLevel,
+    this.goal,
+    this.chatText,
+    this.note,
+    this.screenshotNames = const [],
+    this.selectedProfile,
+  });
+
+  final String? relationType;
+  final String? relationLabel;
+  final String? theme;
+  final List<String> themeAnswers;
+  final String? currentStatus;
+  final String? emotionLevel;
+  final String? goal;
+  final String? chatText;
+  final String? note;
+  final List<String> screenshotNames;
+  final RelationshipProfile? selectedProfile;
+
+  ConsultationDraft copyWith({
+    String? relationType,
+    String? relationLabel,
+    String? theme,
+    List<String>? themeAnswers,
+    String? currentStatus,
+    String? emotionLevel,
+    String? goal,
+    String? chatText,
+    String? note,
+    List<String>? screenshotNames,
+    RelationshipProfile? selectedProfile,
+  }) {
+    return ConsultationDraft(
+      relationType: relationType ?? this.relationType,
+      relationLabel: relationLabel ?? this.relationLabel,
+      theme: theme ?? this.theme,
+      themeAnswers: themeAnswers ?? this.themeAnswers,
+      currentStatus: currentStatus ?? this.currentStatus,
+      emotionLevel: emotionLevel ?? this.emotionLevel,
+      goal: goal ?? this.goal,
+      chatText: chatText ?? this.chatText,
+      note: note ?? this.note,
+      screenshotNames: screenshotNames ?? this.screenshotNames,
+      selectedProfile: selectedProfile ?? this.selectedProfile,
+    );
+  }
+}
+
+class PrecheckDraft {
+  const PrecheckDraft({
+    this.relationType,
+    this.relationLabel,
+    this.draftMessage,
+    this.optionalContextText,
+    this.selectedProfile,
+  });
+
+  final String? relationType;
+  final String? relationLabel;
+  final String? draftMessage;
+  final String? optionalContextText;
+  final RelationshipProfile? selectedProfile;
+
+  PrecheckDraft copyWith({
+    String? relationType,
+    String? relationLabel,
+    String? draftMessage,
+    String? optionalContextText,
+    RelationshipProfile? selectedProfile,
+  }) {
+    return PrecheckDraft(
+      relationType: relationType ?? this.relationType,
+      relationLabel: relationLabel ?? this.relationLabel,
+      draftMessage: draftMessage ?? this.draftMessage,
+      optionalContextText: optionalContextText ?? this.optionalContextText,
+      selectedProfile: selectedProfile ?? this.selectedProfile,
+    );
+  }
+}
+
+class ConsultationResult {
+  const ConsultationResult({
+    required this.sendTimingLabel,
+    required this.sendTimingReason,
+    required this.situationSummary,
+    required this.partnerFeelingEstimate,
+    required this.heardAsInterpretations,
+    required this.avoidPhrases,
+    required this.replyOptions,
+    required this.nextActions,
+    required this.preSendCautions,
+  });
+
+  final String sendTimingLabel;
+  final String sendTimingReason;
+  final String situationSummary;
+  final String partnerFeelingEstimate;
+  final List<String> heardAsInterpretations;
+  final List<String> avoidPhrases;
+  final List<ReplyOption> replyOptions;
+  final List<String> nextActions;
+  final List<String> preSendCautions;
+
+  factory ConsultationResult.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>;
+    final sendTiming =
+        data['send_timing_recommendation'] as Map<String, dynamic>;
+    final replyOptionsRaw = data['reply_options'] as List<dynamic>;
+
+    return ConsultationResult(
+      sendTimingLabel: sendTiming['label'] as String,
+      sendTimingReason: sendTiming['reason'] as String,
+      situationSummary: data['situation_summary'] as String,
+      partnerFeelingEstimate: data['partner_feeling_estimate'] as String,
+      heardAsInterpretations:
+          (data['heard_as_interpretations'] as List<dynamic>).cast<String>(),
+      avoidPhrases: (data['avoid_phrases'] as List<dynamic>).cast<String>(),
+      replyOptions: replyOptionsRaw
+          .map(
+            (item) => ReplyOption(
+              title: item['title'] as String,
+              body: item['body'] as String,
+            ),
+          )
+          .toList(),
+      nextActions: (data['next_actions'] as List<dynamic>).cast<String>(),
+      preSendCautions:
+          (data['pre_send_cautions'] as List<dynamic>).cast<String>(),
+    );
+  }
+}
+
+class PrecheckResult {
+  const PrecheckResult({
+    required this.label,
+    required this.reason,
+    required this.riskPoints,
+    required this.softenedMessage,
+    required this.revisedMessageOptions,
+    required this.suggestConsultMode,
+  });
+
+  final String label;
+  final String reason;
+  final List<String> riskPoints;
+  final String softenedMessage;
+  final List<String> revisedMessageOptions;
+  final bool suggestConsultMode;
+
+  factory PrecheckResult.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>;
+    final safeToSend = data['is_safe_to_send'] as Map<String, dynamic>;
+
+    return PrecheckResult(
+      label: safeToSend['label'] as String,
+      reason: safeToSend['reason'] as String,
+      riskPoints: (data['risk_points'] as List<dynamic>).cast<String>(),
+      softenedMessage: data['softened_message'] as String,
+      revisedMessageOptions:
+          (data['revised_message_options'] as List<dynamic>).cast<String>(),
+      suggestConsultMode: data['suggest_consult_mode'] as bool,
+    );
+  }
+}
+
+class SavedResultItem {
+  const SavedResultItem({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.bestText,
+    required this.createdAt,
+    this.profileId,
+    this.profileName,
+  });
+
+  final String id;
+  final String type;
+  final String title;
+  final String subtitle;
+  final String bestText;
+  final String createdAt;
+  final String? profileId;
+  final String? profileName;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'type': type,
+      'title': title,
+      'subtitle': subtitle,
+      'bestText': bestText,
+      'createdAt': createdAt,
+      'profileId': profileId,
+      'profileName': profileName,
+    };
+  }
+
+  factory SavedResultItem.fromMap(Map<String, dynamic> map) {
+    return SavedResultItem(
+      id: map['id'] as String,
+      type: map['type'] as String,
+      title: map['title'] as String,
+      subtitle: map['subtitle'] as String,
+      bestText: map['bestText'] as String,
+      createdAt: map['createdAt'] as String,
+      profileId: map['profileId'] as String?,
+      profileName: map['profileName'] as String?,
+    );
+  }
+}
+
+class HomeDashboardData {
+  const HomeDashboardData({
+    required this.profile,
+    required this.profileItems,
+    required this.allItems,
+  });
+
+  final RelationshipProfile? profile;
+  final List<SavedResultItem> profileItems;
+  final List<SavedResultItem> allItems;
+}
+
+class SavedResultsViewData {
+  const SavedResultsViewData({
+    required this.activeProfile,
+    required this.items,
+  });
+
+  final RelationshipProfile? activeProfile;
+  final List<SavedResultItem> items;
+}
+
+class ProfileStorage {
+  static const _key = 'go_men_relationship_profile';
+
+  static Future<RelationshipProfile?> loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return RelationshipProfile.fromMap(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveProfile(RelationshipProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(profile.toMap()));
+  }
+
+  static Future<void> clearProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+}
+
+class LocalHistoryStorage {
+  static const _key = 'go_men_saved_results';
+  static const maxItems = 5;
+
+  static Future<List<SavedResultItem>> loadItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+
+    if (raw == null || raw.isEmpty) {
+      return [];
+    }
+
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((item) => SavedResultItem.fromMap(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveItem(SavedResultItem item) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadItems();
+    final updated = [item, ...current];
+    final trimmed = updated.take(maxItems).toList();
+
+    await prefs.setString(
+      _key,
+      jsonEncode(trimmed.map((e) => e.toMap()).toList()),
+    );
+  }
+
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+
+  static Future<List<SavedResultItem>> loadItemsForProfile(String profileId) async {
+    final all = await loadItems();
+    return all.where((item) => item.profileId == profileId).toList();
+  }
+
+  static Future<String?> buildRecentPatternSummary(String profileId) async {
+    final items = await loadItemsForProfile(profileId);
+    if (items.isEmpty) {
+      return null;
+    }
+
+    final recent = items.take(3).toList();
+    final lines = recent.map((item) {
+      return '・${item.title} / ${item.subtitle}';
+    }).join('\n');
+
+    return '''
+この相手との過去の相談傾向:
+$lines
+'''.trim();
+  }
+}
+
+class ThemeQuestion {
+  const ThemeQuestion({
+    required this.title,
+    required this.options,
+  });
+
+  final String title;
+  final List<String> options;
+}
+
+class ReplyOption {
+  const ReplyOption({
+    required this.title,
+    required this.body,
+  });
+
+  final String title;
+  final String body;
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late Future<HomeDashboardData> _dashboardFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _dashboardFuture = _loadDashboard();
+  }
+
+  Future<HomeDashboardData> _loadDashboard() async {
+    final profile = await ProfileStorage.loadProfile();
+    final allItems = await LocalHistoryStorage.loadItems();
+    final profileItems = profile == null
+        ? <SavedResultItem>[]
+        : allItems.where((item) => item.profileId == profile.id).toList();
+
+    return HomeDashboardData(
+      profile: profile,
+      profileItems: profileItems,
+      allItems: allItems,
+    );
+  }
+
+  void _reloadDashboard() {
+    setState(() {
+      _dashboardFuture = _loadDashboard();
+    });
+  }
+
+  void _showProfileDetail(RelationshipProfile profile) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    profile.displayName,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    profile.relationLabel,
+                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 20),
+                  _ProfileDetailItem(
+                    label: '傷つきやすい言い方',
+                    value: profile.sensitiveTo,
+                  ),
+                  _ProfileDetailItem(
+                    label: '通りやすい伝え方',
+                    value: profile.worksWellWith,
+                  ),
+                  _ProfileDetailItem(
+                    label: '距離感の傾向',
+                    value: profile.distancePreference,
+                  ),
+                  _ProfileDetailItem(
+                    label: 'よく揉めるテーマ',
+                    value: profile.commonConflicts,
+                  ),
+                  _ProfileDetailItem(
+                    label: '避けたいワード',
+                    value: profile.avoidWords,
+                  ),
+                  _ProfileDetailItem(
+                    label: '補足メモ',
+                    value: profile.notes,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(this.context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => ProfileEditScreen(profile: profile),
+                            ),
+                          )
+                          .then((_) => _reloadDashboard());
+                    },
+                    child: const Text('このプロフィールを編集する'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: FutureBuilder<HomeDashboardData>(
+          future: _dashboardFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final data = snapshot.data ??
+                const HomeDashboardData(
+                  profile: null,
+                  profileItems: [],
+                  allItems: [],
+                );
+            final profile = data.profile;
+            final profileItems = data.profileItems;
+            final allItems = data.allItems;
+            final savedCount = allItems.length;
+            final saveProgress = savedCount / LocalHistoryStorage.maxItems;
+            final profileProgress = profile == null ? 0.0 : 1.0;
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              children: [
+                const SizedBox(height: 24),
+                const Text(
+                  'Go-men',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '関係を壊さないための、次の一手を整える',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsHubScreen(),
+                            ),
+                          )
+                          .then((_) => _reloadDashboard());
+                    },
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('設定・ポリシー'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          '無料版の利用状況',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '保存件数',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: saveProgress.clamp(0.0, 1.0),
+                          minHeight: 8,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$savedCount / ${LocalHistoryStorage.maxItems} 件',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'プロフィール件数',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: profileProgress,
+                          minHeight: 8,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${profile == null ? 0 : 1} / 1 件',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '有料版では複数プロフィール・保存無制限・相手ごとの履歴整理を開放予定です。',
+                          style: TextStyle(fontSize: 13, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (profile != null) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            '使用中の関係性プロフィール',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            profile.displayName,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(profile.relationLabel),
+                          const SizedBox(height: 10),
+                          Text(
+                            '傷つきやすい: ${profile.sensitiveTo.isEmpty ? '未設定' : profile.sensitiveTo}',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '通りやすい: ${profile.worksWellWith.isEmpty ? '未設定' : profile.worksWellWith}',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _showProfileDetail(profile),
+                                  child: const Text('詳しく見る'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.of(context)
+                                        .push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const SavedResultsScreen(
+                                              initialOnlyCurrentProfile: true,
+                                            ),
+                                          ),
+                                        )
+                                        .then((_) => _reloadDashboard());
+                                  },
+                                  child: const Text('この相手の履歴'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'この相手との最近の傾向',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            buildTrendHeadline(profileItems),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              height: 1.5,
+                            ),
+                          ),
+                          if (profileItems.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            ...buildTrendBullets(profileItems).map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text('・$item'),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                ElevatedButton(
+                  onPressed: () {
+                    if (profile != null) {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => ThemeSelectionScreen(
+                                draft: ConsultationDraft(
+                                  relationType: profile.relationType,
+                                  relationLabel: profile.relationLabel,
+                                  selectedProfile: profile,
+                                ),
+                              ),
+                            ),
+                          )
+                          .then((_) => _reloadDashboard());
+                    } else {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => const RelationTypeScreen(),
+                            ),
+                          )
+                          .then((_) => _reloadDashboard());
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: Text(
+                    profile != null ? '今すぐ相談する（プロフィール適用）' : '今すぐ相談する',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => PrecheckInputScreen(
+                              initialProfile: profile,
+                            ),
+                          ),
+                        )
+                        .then((_) => _reloadDashboard());
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: Text(
+                    profile != null
+                        ? '送る前にチェックする（プロフィール適用）'
+                        : '送る前にチェックする',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => const SavedResultsScreen(),
+                          ),
+                        )
+                        .then((_) => _reloadDashboard());
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: const Text(
+                    '保存した結果を見る',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => ProfileEditScreen(profile: profile),
+                          ),
+                        )
+                        .then((_) => _reloadDashboard());
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: Text(
+                    profile != null ? '関係性プロフィールを編集する' : '関係性プロフィールを設定する',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  '無料版ではプロフィールは1件、保存は直近5件までです',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'MVP v1.1',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black45, fontSize: 14),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileDetailItem extends StatelessWidget {
+  const _ProfileDetailItem({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayValue = value.trim().isEmpty ? '未設定' : value.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black54,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            displayValue,
+            style: const TextStyle(fontSize: 16, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProfileEditScreen extends StatefulWidget {
+  const ProfileEditScreen({
+    super.key,
+    this.profile,
+  });
+
+  final RelationshipProfile? profile;
+
+  @override
+  State<ProfileEditScreen> createState() => _ProfileEditScreenState();
+}
+
+class _ProfileEditScreenState extends State<ProfileEditScreen> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _sensitiveToController;
+  late final TextEditingController _worksWellWithController;
+  late final TextEditingController _distanceController;
+  late final TextEditingController _commonConflictsController;
+  late final TextEditingController _avoidWordsController;
+  late final TextEditingController _notesController;
+
+  String? _relationType;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController =
+        TextEditingController(text: widget.profile?.displayName ?? '');
+    _sensitiveToController =
+        TextEditingController(text: widget.profile?.sensitiveTo ?? '');
+    _worksWellWithController =
+        TextEditingController(text: widget.profile?.worksWellWith ?? '');
+    _distanceController =
+        TextEditingController(text: widget.profile?.distancePreference ?? '');
+    _commonConflictsController =
+        TextEditingController(text: widget.profile?.commonConflicts ?? '');
+    _avoidWordsController =
+        TextEditingController(text: widget.profile?.avoidWords ?? '');
+    _notesController = TextEditingController(text: widget.profile?.notes ?? '');
+    _relationType = widget.profile?.relationType;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _sensitiveToController.dispose();
+    _worksWellWithController.dispose();
+    _distanceController.dispose();
+    _commonConflictsController.dispose();
+    _avoidWordsController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _save() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('相手の名前や呼び名を入れてください')),
+      );
+      return;
+    }
+
+    if (_relationType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('関係性を選んでください')),
+      );
+      return;
+    }
+
+    final profile = RelationshipProfile(
+      id: widget.profile?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      displayName: _nameController.text.trim(),
+      relationType: _relationType!,
+      sensitiveTo: _sensitiveToController.text.trim(),
+      worksWellWith: _worksWellWithController.text.trim(),
+      distancePreference: _distanceController.text.trim(),
+      commonConflicts: _commonConflictsController.text.trim(),
+      avoidWords: _avoidWordsController.text.trim(),
+      notes: _notesController.text.trim(),
+      createdAt: widget.profile?.createdAt ?? DateTime.now().toIso8601String(),
+    );
+
+    await ProfileStorage.saveProfile(profile);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _deleteProfile() async {
+    await ProfileStorage.clearProfile();
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  Widget _relationButton(String value, String label) {
+    final selected = _relationType == value;
+
+    if (selected) {
+      return ElevatedButton(
+        onPressed: () {
+          setState(() {
+            _relationType = value;
+          });
+        },
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        child: Text(label),
+      );
+    }
+
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          _relationType = value;
+        });
+      },
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+      ),
+      child: Text(label),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.profile != null;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditing ? '関係性プロフィールを編集' : '関係性プロフィールを作成'),
+        actions: [
+          if (isEditing)
+            IconButton(
+              onPressed: _deleteProfile,
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '削除',
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          children: [
+            const Text(
+              '相手の名前・呼び名',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: '例: みほ、彼、母',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '関係性',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _relationButton('couple', '恋人・パートナー'),
+            const SizedBox(height: 10),
+            _relationButton('friend', '友人'),
+            const SizedBox(height: 10),
+            _relationButton('parent_child', '親子'),
+            const SizedBox(height: 24),
+            const Text(
+              '傷つきやすい言い方',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _sensitiveToController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '例: 冷たい言い方、返事の催促、強い決めつけ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '通りやすい伝え方',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _worksWellWithController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '例: まず受け止める、短くやさしく伝える',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '距離感の傾向',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _distanceController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '例: 一度引かれると追われるのが苦手',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'よく揉めるテーマ',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _commonConflictsController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '例: 連絡頻度、予定変更、言い方',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '避けたいワード',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _avoidWordsController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '例: なんで、いつも、普通は',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '補足メモ',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: '例: 疲れている時は返信が遅くなる',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton(
+              onPressed: _save,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                'このプロフィールを保存する',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class RelationTypeScreen extends StatelessWidget {
+  const RelationTypeScreen({super.key});
+
+  void _selectRelation(BuildContext context, String relationType, String label) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ThemeSelectionScreen(
+          draft: ConsultationDraft(
+            relationType: relationType,
+            relationLabel: label,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ConsultationScaffold(
+      currentStep: 1,
+      title: '相手との関係を教えてください',
+      subtitle: '受け取り方や提案の仕方が変わるため、最初に関係性を選んでください',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ElevatedButton(
+            onPressed: () =>
+                _selectRelation(context, 'couple', '恋人・パートナー'),
+            style: elevatedChoiceStyle,
+            child: const Text('恋人・パートナー', style: choiceTextStyle),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => _selectRelation(context, 'friend', '友人'),
+            style: elevatedChoiceStyle,
+            child: const Text('友人', style: choiceTextStyle),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => _selectRelation(context, 'parent_child', '親子'),
+            style: elevatedChoiceStyle,
+            child: const Text('親子', style: choiceTextStyle),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ThemeSelectionScreen extends StatelessWidget {
+  const ThemeSelectionScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  List<String> get themes {
+    switch (draft.relationType) {
+      case 'friend':
+        return [
+          '連絡頻度',
+          '言い方がきつい',
+          '約束',
+          '人間関係・温度差',
+          'お金',
+          '距離感',
+          '価値観の違い',
+          'その他',
+        ];
+      case 'parent_child':
+        return [
+          '連絡頻度',
+          '言い方がきつい',
+          '約束',
+          '干渉・信頼',
+          'お金',
+          '手伝い・役割分担',
+          '距離感',
+          '価値観の違い',
+          'その他',
+        ];
+      case 'couple':
+      default:
+        return [
+          '連絡頻度',
+          '言い方がきつい',
+          '約束',
+          '嫉妬',
+          'お金',
+          '家事',
+          '距離感',
+          '親の介入',
+          '価値観の違い',
+          'その他',
+        ];
+    }
+  }
+
+  void _selectTheme(BuildContext context, String theme) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ThemeDetailScreen(
+          draft: draft.copyWith(theme: theme),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metaText = draft.selectedProfile != null
+        ? 'プロフィール: ${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}'
+        : '関係性: ${draft.relationLabel}';
+
+    return ConsultationScaffold(
+      currentStep: 2,
+      title: '今回は何がきっかけですか？',
+      subtitle: 'いちばん近いものを1つ選んでください',
+      meta: metaText,
+      child: Expanded(
+        child: ListView.separated(
+          itemCount: themes.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final theme = themes[index];
+            return ElevatedButton(
+              onPressed: () => _selectTheme(context, theme),
+              style: elevatedChoiceStyle,
+              child: Text(theme, style: choiceTextStyle),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class ThemeDetailScreen extends StatefulWidget {
+  const ThemeDetailScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  @override
+  State<ThemeDetailScreen> createState() => _ThemeDetailScreenState();
+}
+
+class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
+  int currentQuestionIndex = 0;
+  final List<String> answers = [];
+
+  List<ThemeQuestion> get questions => _buildQuestions(
+        relationType: widget.draft.relationType ?? 'couple',
+        theme: widget.draft.theme ?? 'その他',
+      );
+
+  void _selectAnswer(String answer) {
+    answers.add(answer);
+
+    if (currentQuestionIndex < questions.length - 1) {
+      setState(() {
+        currentQuestionIndex += 1;
+      });
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CurrentStatusScreen(
+          draft: widget.draft.copyWith(
+            themeAnswers: List<String>.from(answers),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final question = questions[currentQuestionIndex];
+
+    return ConsultationScaffold(
+      currentStep: 3,
+      title: question.title,
+      subtitle: '${currentQuestionIndex + 1} / ${questions.length}',
+      meta: 'テーマ: ${widget.draft.theme}',
+      child: Expanded(
+        child: ListView.separated(
+          itemCount: question.options.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final option = question.options[index];
+            return ElevatedButton(
+              onPressed: () => _selectAnswer(option),
+              style: elevatedChoiceStyle,
+              child: Text(option, style: choiceTextStyle),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class CurrentStatusScreen extends StatelessWidget {
+  const CurrentStatusScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  void _selectStatus(BuildContext context, String status) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmotionLevelScreen(
+          draft: draft.copyWith(currentStatus: status),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const statuses = [
+      '相手が怒っている',
+      '自分が怒っている',
+      'お互い感情的',
+      '既読無視されている',
+      '未読のまま',
+      '会話が止まっている',
+      'さっき電話で揉めた',
+      '今から返信したい',
+    ];
+
+    return ConsultationScaffold(
+      currentStep: 4,
+      title: '今はどんな状態ですか？',
+      subtitle: 'いちばん近いものを選んでください',
+      meta: 'テーマ: ${draft.theme}',
+      child: Expanded(
+        child: ListView.separated(
+          itemCount: statuses.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final status = statuses[index];
+            return ElevatedButton(
+              onPressed: () => _selectStatus(context, status),
+              style: elevatedChoiceStyle,
+              child: Text(status, style: choiceTextStyle),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class EmotionLevelScreen extends StatelessWidget {
+  const EmotionLevelScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  void _selectEmotion(BuildContext context, String emotionLevel) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GoalScreen(
+          draft: draft.copyWith(emotionLevel: emotionLevel),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const emotionLevels = [
+      '落ち着いている',
+      '少ししんどい',
+      'かなり感情的',
+      '今送ると悪化しそう',
+    ];
+
+    return ConsultationScaffold(
+      currentStep: 5,
+      title: '今の感情の強さはどれくらいですか？',
+      subtitle: '今の自分にいちばん近いものを選んでください',
+      meta: 'Q3: ${draft.currentStatus}',
+      child: Expanded(
+        child: ListView.separated(
+          itemCount: emotionLevels.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final level = emotionLevels[index];
+            return ElevatedButton(
+              onPressed: () => _selectEmotion(context, level),
+              style: elevatedChoiceStyle,
+              child: Text(level, style: choiceTextStyle),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class GoalScreen extends StatelessWidget {
+  const GoalScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  void _selectGoal(BuildContext context, String goal) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EvidenceInputScreen(
+          draft: draft.copyWith(goal: goal),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const goals = [
+      '謝りたい',
+      '誤解を解きたい',
+      '落ち着かせたい',
+      '仲直りしたい',
+      '距離を置きたい',
+      '相手の気持ちを知りたい',
+    ];
+
+    return ConsultationScaffold(
+      currentStep: 6,
+      title: '今回どうしたいですか？',
+      subtitle: '今いちばん近い目的を選んでください',
+      meta: 'Q3.5: ${draft.emotionLevel}',
+      child: Expanded(
+        child: ListView.separated(
+          itemCount: goals.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final goal = goals[index];
+            return ElevatedButton(
+              onPressed: () => _selectGoal(context, goal),
+              style: elevatedChoiceStyle,
+              child: Text(goal, style: choiceTextStyle),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class EvidenceInputScreen extends StatefulWidget {
+  const EvidenceInputScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  @override
+  State<EvidenceInputScreen> createState() => _EvidenceInputScreenState();
+}
+
+class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
+  late final TextEditingController _chatController;
+  late List<String> _screenshots;
+
+  @override
+  void initState() {
+    super.initState();
+    _chatController = TextEditingController(text: widget.draft.chatText ?? '');
+    _screenshots = List<String>.from(widget.draft.screenshotNames);
+  }
+
+  @override
+  void dispose() {
+    _chatController.dispose();
+    super.dispose();
+  }
+
+  void _addDummyScreenshot() {
+    setState(() {
+      _screenshots = [
+        ..._screenshots,
+        'スクショ ${_screenshots.length + 1}',
+      ];
+    });
+  }
+
+  void _removeScreenshot(String name) {
+    setState(() {
+      _screenshots = _screenshots.where((item) => item != name).toList();
+    });
+  }
+
+  void _goNext() {
+    final chatText = _chatController.text.trim();
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NoteScreen(
+          draft: widget.draft.copyWith(
+            chatText: chatText.isEmpty ? null : chatText,
+            screenshotNames: List<String>.from(_screenshots),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _skipEvidence() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NoteScreen(
+          draft: widget.draft.copyWith(
+            chatText: null,
+            screenshotNames: const [],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasInput =
+        _chatController.text.trim().isNotEmpty || _screenshots.isNotEmpty;
+
+    return ConsultationScaffold(
+      currentStep: 7,
+      title: 'やり取りがあれば追加してください',
+      subtitle: '任意です。なくても相談できます',
+      meta: 'Q4: ${widget.draft.goal}',
+      child: Expanded(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _addDummyScreenshot,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: const Text('スクリーンショットを追加'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'この段階ではUIだけ先に作っています。ボタンを押すと仮のスクショタグが増えます。',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              if (_screenshots.isNotEmpty) ...[
+                const Text(
+                  '追加したスクリーンショット',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _screenshots
+                      .map(
+                        (shot) => Chip(
+                          label: Text(shot),
+                          onDeleted: () => _removeScreenshot(shot),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 24),
+              ],
+              TextField(
+                controller: _chatController,
+                maxLines: 10,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'テキストで入力する',
+                  hintText:
+                      '例\n私：昨日なんで返事くれなかったの？\n相手：仕事だったって言ってるじゃん\n私：いつもそうだよね\n相手：もういい',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '個人情報が含まれる場合があります。必要に応じて隠してから追加してください。',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton(
+                onPressed: _skipEvidence,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                child: const Text(
+                  'やり取りなしで進む',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _goNext,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                child: Text(
+                  hasInput ? 'この内容で進む' : '入力して進む',
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class NoteScreen extends StatefulWidget {
+  const NoteScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  @override
+  State<NoteScreen> createState() => _NoteScreenState();
+}
+
+class _NoteScreenState extends State<NoteScreen> {
+  late final TextEditingController _noteController;
+
+  @override
+  void initState() {
+    super.initState();
+    _noteController = TextEditingController(text: widget.draft.note ?? '');
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AnalyzeScreen(
+          draft: widget.draft.copyWith(
+            note: _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasEvidence =
+        (widget.draft.chatText != null && widget.draft.chatText!.isNotEmpty) ||
+        widget.draft.screenshotNames.isNotEmpty;
+
+    return ConsultationScaffold(
+      currentStep: 8,
+      title: '補足があれば教えてください',
+      subtitle: '任意です。空欄のままでもそのまま相談できます',
+      meta: 'やり取り入力: ${hasEvidence ? 'あり' : 'なし'}',
+      child: Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _noteController,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                labelText: '補足',
+                hintText:
+                    '例\n・本当は責めたいわけではない\n・相手は最近かなり疲れている\n・別れたいわけではない\n・前にも同じことで揉めた',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '補足はなくても大丈夫です。',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: _submit,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                'この内容で相談する',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AnalyzeScreen extends StatefulWidget {
+  const AnalyzeScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final ConsultationDraft draft;
+
+  @override
+  State<AnalyzeScreen> createState() => _AnalyzeScreenState();
+}
+
+class _AnalyzeScreenState extends State<AnalyzeScreen> {
+  String? errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _sendConsultation();
+  }
+
+  Future<void> _sendConsultation() async {
+    try {
+      final uri = Uri.parse('http://127.0.0.1:8000/consult/sessions');
+      final profile = widget.draft.selectedProfile;
+      final recentPatternSummary = profile == null
+          ? null
+          : await LocalHistoryStorage.buildRecentPatternSummary(profile.id);
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'relation_type': widget.draft.relationType,
+          'theme': widget.draft.theme,
+          'theme_details': widget.draft.themeAnswers,
+          'current_status': widget.draft.currentStatus,
+          'emotion_level': widget.draft.emotionLevel,
+          'goal': widget.draft.goal,
+          'chat_text': widget.draft.chatText,
+          'note': widget.draft.note,
+          'profile_context': profile?.toProfileContext(),
+          'recent_pattern_summary': recentPatternSummary,
+          'upload_ids': <String>[],
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        setState(() {
+          errorText = 'APIエラー: ${response.statusCode}\n${response.body}';
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = ConsultationResult.fromJson(decoded);
+
+      final bestText =
+          result.replyOptions.isNotEmpty ? result.replyOptions.first.body : '';
+
+      await LocalHistoryStorage.saveItem(
+        SavedResultItem(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          type: 'consult',
+          title: '相談 / ${widget.draft.theme ?? 'その他'}',
+          subtitle: result.sendTimingLabel,
+          bestText: bestText,
+          createdAt: DateTime.now().toIso8601String(),
+          profileId: profile?.id,
+          profileName: profile?.displayName,
+        ),
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ResultScreen(
+            draft: widget.draft,
+            result: result,
+          ),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        errorText = '接続エラー: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (errorText != null) {
+      return ErrorScreen(
+        title: '相談結果',
+        errorText: errorText!,
+        onRetry: _sendConsultation,
+      );
+    }
+
+    return const LoadingScreen(
+      title: 'Go-men が整理しています',
+      lines: [
+        '相手の受け取り方と、今の動き方を整理しています',
+        '悪化しにくい返し方を考えています',
+      ],
+    );
+  }
+}
+
+class PrecheckInputScreen extends StatefulWidget {
+  const PrecheckInputScreen({
+    super.key,
+    this.initialProfile,
+  });
+
+  final RelationshipProfile? initialProfile;
+
+  @override
+  State<PrecheckInputScreen> createState() => _PrecheckInputScreenState();
+}
+
+class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
+  String? _relationType;
+  String? _relationLabel;
+  late final TextEditingController _draftController;
+  late final TextEditingController _contextController;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftController = TextEditingController();
+    _contextController = TextEditingController();
+    _relationType = widget.initialProfile?.relationType;
+    _relationLabel = widget.initialProfile?.relationLabel;
+  }
+
+  @override
+  void dispose() {
+    _draftController.dispose();
+    _contextController.dispose();
+    super.dispose();
+  }
+
+  void _selectRelation(String type, String label) {
+    setState(() {
+      _relationType = type;
+      _relationLabel = label;
+    });
+  }
+
+  void _submit() {
+    final draftMessage = _draftController.text.trim();
+    final contextText = _contextController.text.trim();
+
+    if (_relationType == null || _relationLabel == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('相手との関係を選んでください')),
+      );
+      return;
+    }
+
+    if (draftMessage.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('チェックしたい文を入力してください')),
+      );
+      return;
+    }
+
+    final draft = PrecheckDraft(
+      relationType: _relationType,
+      relationLabel: _relationLabel,
+      draftMessage: draftMessage,
+      optionalContextText: contextText.isEmpty ? null : contextText,
+      selectedProfile: widget.initialProfile,
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PrecheckAnalyzeScreen(draft: draft),
+      ),
+    );
+  }
+
+  Widget _relationButton(String type, String label) {
+    final selected = _relationType == type;
+
+    if (selected) {
+      return ElevatedButton(
+        onPressed: widget.initialProfile != null
+            ? null
+            : () => _selectRelation(type, label),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        child: Text(label),
+      );
+    }
+
+    return OutlinedButton(
+      onPressed: widget.initialProfile != null
+          ? null
+          : () => _selectRelation(type, label),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+      ),
+      child: Text(label),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.initialProfile;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('送る前にチェックする'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          children: [
+            if (profile != null) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '適用中のプロフィール',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        profile.displayName,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(profile.relationLabel),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+            const Text(
+              '相手との関係',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _relationButton('couple', '恋人・パートナー'),
+            const SizedBox(height: 10),
+            _relationButton('friend', '友人'),
+            const SizedBox(height: 10),
+            _relationButton('parent_child', '親子'),
+            const SizedBox(height: 28),
+            const Text(
+              '送ろうとしている文',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _draftController,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                labelText: '下書き',
+                hintText:
+                    '例\nなんで昨日返事くれなかったの？こっちはずっと待ってたんだけど。',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '補足（任意）',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _contextController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: '補足',
+                hintText:
+                    '例\n責めたいわけではないけど、不安で強い言い方になってしまった。',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '相手にどう聞こえるか、今送ってよいか、ベストな修正文を出します。',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton(
+              onPressed: _submit,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                'この文をチェックする',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PrecheckAnalyzeScreen extends StatefulWidget {
+  const PrecheckAnalyzeScreen({
+    super.key,
+    required this.draft,
+  });
+
+  final PrecheckDraft draft;
+
+  @override
+  State<PrecheckAnalyzeScreen> createState() => _PrecheckAnalyzeScreenState();
+}
+
+class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
+  String? errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _sendPrecheck();
+  }
+
+  Future<void> _sendPrecheck() async {
+    try {
+      final uri = Uri.parse('http://127.0.0.1:8000/precheck');
+      final profile = widget.draft.selectedProfile;
+      final recentPatternSummary = profile == null
+          ? null
+          : await LocalHistoryStorage.buildRecentPatternSummary(profile.id);
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'relation_type': widget.draft.relationType,
+          'draft_message': widget.draft.draftMessage,
+          'optional_context_text': widget.draft.optionalContextText,
+          'profile_context': profile?.toProfileContext(),
+          'recent_pattern_summary': recentPatternSummary,
+          'optional_context_upload_ids': <String>[],
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        setState(() {
+          errorText = 'APIエラー: ${response.statusCode}\n${response.body}';
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = PrecheckResult.fromJson(decoded);
+
+      await LocalHistoryStorage.saveItem(
+        SavedResultItem(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          type: 'precheck',
+          title: '送信前チェック / ${widget.draft.relationLabel ?? '未設定'}',
+          subtitle: result.label,
+          bestText: result.softenedMessage,
+          createdAt: DateTime.now().toIso8601String(),
+          profileId: profile?.id,
+          profileName: profile?.displayName,
+        ),
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PrecheckResultScreen(
+            draft: widget.draft,
+            result: result,
+          ),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        errorText = '接続エラー: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (errorText != null) {
+      return ErrorScreen(
+        title: '送信前チェック',
+        errorText: errorText!,
+        onRetry: _sendPrecheck,
+      );
+    }
+
+    return const LoadingScreen(
+      title: '送る前に整えています',
+      lines: [
+        '相手にどう聞こえるかを見ています',
+        '今送ってよいかと、ベストな修正文を考えています',
+      ],
+    );
+  }
+}
+
+class ResultScreen extends StatelessWidget {
+  const ResultScreen({
+    super.key,
+    required this.draft,
+    required this.result,
+  });
+
+  final ConsultationDraft draft;
+  final ConsultationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final bestReply =
+        result.replyOptions.isNotEmpty ? result.replyOptions.first : null;
+    final otherReplies = result.replyOptions.length > 1
+        ? result.replyOptions.sublist(1)
+        : <ReplyOption>[];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('相談結果'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          children: [
+            if (draft.selectedProfile != null)
+              _ResultCard(
+                title: '適用したプロフィール',
+                child: Text(
+                  '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                ),
+              ),
+            _DecisionSummaryCard(
+              eyebrow: '今のおすすめ',
+              headline: result.sendTimingLabel,
+              body: result.sendTimingReason,
+            ),
+            if (bestReply != null)
+              _HeroReplyCard(
+                title: bestReply.title,
+                body: bestReply.body,
+                buttonLabel: 'この返信をコピー',
+                helperText: 'そのまま送れる形で、まず一番通りやすい案です。',
+              ),
+            if (otherReplies.isNotEmpty)
+              _ResultCard(
+                title: 'その他には',
+                child: Column(
+                  children: otherReplies
+                      .map(
+                        (option) => _ReplyOptionCard(option: option),
+                      )
+                      .toList(),
+                ),
+              ),
+            _ResultCard(
+              title: '相手にどう聞こえたか',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.heardAsInterpretations
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('・$item'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            _ResultCard(
+              title: '相手の気持ちの見立て',
+              child: Text(result.partnerFeelingEstimate),
+            ),
+            _ResultCard(
+              title: '今は避けたい言い方',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.avoidPhrases
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('・$item'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PrecheckInputScreen(
+                      initialProfile: draft.selectedProfile,
+                    ),
+                  ),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                '自分の文をチェックする',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text('ホームに戻る', style: TextStyle(fontSize: 18)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PrecheckResultScreen extends StatelessWidget {
+  const PrecheckResultScreen({
+    super.key,
+    required this.draft,
+    required this.result,
+  });
+
+  final PrecheckDraft draft;
+  final PrecheckResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final alternatives = result.revisedMessageOptions.length > 1
+        ? result.revisedMessageOptions.sublist(1)
+        : <String>[];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('送信前チェック結果'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          children: [
+            if (draft.selectedProfile != null)
+              _ResultCard(
+                title: '適用したプロフィール',
+                child: Text(
+                  '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                ),
+              ),
+            _DecisionSummaryCard(
+              eyebrow: '今送ってよいか',
+              headline: result.label,
+              body: result.reason,
+            ),
+            _HeroReplyCard(
+              title: 'まずこれがベスト',
+              body: result.softenedMessage,
+              buttonLabel: 'この文をコピー',
+              helperText: '送るならまずこの形。やわらかさと伝わりやすさのバランスを優先しています。',
+            ),
+            if (alternatives.isNotEmpty)
+              _ResultCard(
+                title: 'その他には',
+                child: Column(
+                  children: alternatives
+                      .map(
+                        (text) => _SimpleReplyCard(text: text),
+                      )
+                      .toList(),
+                ),
+              ),
+            _ResultCard(
+              title: 'こう聞こえるかも',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.riskPoints
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('・$item'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ThemeSelectionScreen(
+                      draft: ConsultationDraft(
+                        relationType: draft.relationType,
+                        relationLabel: draft.relationLabel,
+                        selectedProfile: draft.selectedProfile,
+                      ),
+                    ),
+                  ),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                '相談モードでも見る',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text(
+                'ホームに戻る',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class SettingsHubScreen extends StatelessWidget {
+  const SettingsHubScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('設定・ポリシー'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    Text(
+                      'リリース準備中',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Go-men は、関係を悪化させにくい返信づくりを支援するアプリです。現在はMVP段階のため、無料版の上限や法務表示を先に整えています。',
+                      style: TextStyle(fontSize: 16, height: 1.55),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SettingsNavCard(
+              icon: Icons.privacy_tip_outlined,
+              title: 'プライバシーポリシー',
+              subtitle: '入力内容の保存とAI送信について',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _SettingsNavCard(
+              icon: Icons.description_outlined,
+              title: '利用規約・免責',
+              subtitle: '使い方のルールと注意事項',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const TermsAndDisclaimerScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _SettingsNavCard(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Go-men Pro',
+              subtitle: '無料版 / 有料版の違い',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPlanScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _SettingsNavCard(
+              icon: Icons.mail_outline,
+              title: 'お問い合わせ',
+              subtitle: 'リリース時の連絡先案内',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ContactScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      '現在の無料版',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text('・プロフィールは1件まで'),
+                    SizedBox(height: 6),
+                    Text('・保存は直近5件まで'),
+                    SizedBox(height: 6),
+                    Text('・相談 / 送信前チェックは利用可能'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsNavCard extends StatelessWidget {
+  const _SettingsNavCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class PrivacyPolicyScreen extends StatelessWidget {
+  const PrivacyPolicyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return _LegalScaffold(
+      title: 'プライバシーポリシー',
+      children: const [
+        _LegalSection(
+          title: '1. 取得する情報',
+          body:
+              'Go-men は、相談内容、送信前チェックの文章、関係性プロフィール、保存した結果など、ユーザーが入力した情報を取り扱います。',
+        ),
+        _LegalSection(
+          title: '2. 利用目的',
+          body:
+              '取得した情報は、返信候補の生成、送信前チェック、プロフィールに応じた提案、履歴表示などの機能提供のために使用します。',
+        ),
+        _LegalSection(
+          title: '3. 外部サービスへの送信',
+          body:
+              'AIによる分析を行うため、入力内容の一部がサーバー経由で外部AIサービスに送信される場合があります。個人情報や極めて機微な情報は、必要最小限にとどめてください。',
+        ),
+        _LegalSection(
+          title: '4. 端末内保存',
+          body:
+              'プロフィール情報や保存結果は、MVP版では主に端末内のローカル保存を利用しています。端末の共有や紛失にはご注意ください。',
+        ),
+        _LegalSection(
+          title: '5. スクリーンショット等',
+          body:
+              '将来的にスクリーンショットや画像入力を扱う場合、相手の氏名、連絡先、会話内容などが含まれることがあります。必要に応じて加工やマスキングを行ってください。',
+        ),
+        _LegalSection(
+          title: '6. 改定',
+          body:
+              '本ポリシーは、機能追加や法令対応に応じて更新されることがあります。',
+        ),
+      ],
+    );
+  }
+}
+
+class TermsAndDisclaimerScreen extends StatelessWidget {
+  const TermsAndDisclaimerScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return _LegalScaffold(
+      title: '利用規約・免責',
+      children: const [
+        _LegalSection(
+          title: '1. 本サービスの性質',
+          body:
+              'Go-men は、対人コミュニケーションの整理や文章作成を補助するためのツールです。専門家による法律・医療・精神医療・カウンセリング等の助言を代替するものではありません。',
+        ),
+        _LegalSection(
+          title: '2. 禁止事項',
+          body:
+              '違法行為、嫌がらせ、脅迫、差別、ストーカー行為、個人情報の不適切な共有、その他第三者を害する目的での利用を禁止します。',
+        ),
+        _LegalSection(
+          title: '3. 自己責任',
+          body:
+              '返信文や提案の採用・送信はユーザー自身の判断と責任で行ってください。送信結果や人間関係の変化について、運営は結果を保証しません。',
+        ),
+        _LegalSection(
+          title: '4. 緊急時の非対応',
+          body:
+              '自傷他害、DV、脅迫、ストーカー、犯罪被害など緊急性の高い状況では、本サービスではなく警察・医療機関・専門窓口等の公的支援をご利用ください。',
+        ),
+        _LegalSection(
+          title: '5. サービス変更',
+          body:
+              '機能、料金、保存上限、提供内容は予告なく変更されることがあります。',
+        ),
+      ],
+    );
+  }
+}
+
+class ProPlanScreen extends StatelessWidget {
+  const ProPlanScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Go-men Pro'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    Text(
+                      '無料版',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 12),
+                    Text('・相談モード'),
+                    SizedBox(height: 6),
+                    Text('・送信前チェック'),
+                    SizedBox(height: 6),
+                    Text('・プロフィール 1件まで'),
+                    SizedBox(height: 6),
+                    Text('・保存 直近5件まで'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    Text(
+                      'Pro 予定機能',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 12),
+                    Text('・複数プロフィール'),
+                    SizedBox(height: 6),
+                    Text('・保存件数の拡張 / 無制限保存'),
+                    SizedBox(height: 6),
+                    Text('・相手ごとの履歴整理'),
+                    SizedBox(height: 6),
+                    Text('・いつものすれ違いパターン分析'),
+                    SizedBox(height: 6),
+                    Text('・より深い文脈反映'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: const Text(
+                  '現時点ではPro課金はまだ未接続です。まずは無料版の価値を固め、その後に有料導線を自然に実装する想定です。',
+                  style: TextStyle(height: 1.55),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ContactScreen extends StatelessWidget {
+  const ContactScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const contactEmail = 'support@gomen.app（公開前の仮表記）';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('お問い合わせ'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'お問い合わせ先',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      contactEmail,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: () => copyText(
+                        context,
+                        contactEmail,
+                        label: '連絡先をコピーしました',
+                      ),
+                      child: const Text('連絡先をコピー'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  '公開時には、実際に受信できるサポートメールアドレスへ差し替えてください。App Store / Google Play の審査では、ユーザーが確認できるサポート窓口があると安心です。',
+                  style: TextStyle(height: 1.55),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LegalScaffold extends StatelessWidget {
+  const _LegalScaffold({
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+class _LegalSection extends StatelessWidget {
+  const _LegalSection({
+    required this.title,
+    required this.body,
+  });
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              body,
+              style: const TextStyle(height: 1.6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SavedResultsScreen extends StatefulWidget {
+  const SavedResultsScreen({
+    super.key,
+    this.initialOnlyCurrentProfile = false,
+  });
+
+  final bool initialOnlyCurrentProfile;
+
+  @override
+  State<SavedResultsScreen> createState() => _SavedResultsScreenState();
+}
+
+class _SavedResultsScreenState extends State<SavedResultsScreen> {
+  late Future<SavedResultsViewData> _viewFuture;
+  late bool _onlyCurrentProfile;
+  String _typeFilter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _onlyCurrentProfile = widget.initialOnlyCurrentProfile;
+    _viewFuture = _loadViewData();
+  }
+
+  Future<SavedResultsViewData> _loadViewData() async {
+    final profile = await ProfileStorage.loadProfile();
+    final items = await LocalHistoryStorage.loadItems();
+    return SavedResultsViewData(
+      activeProfile: profile,
+      items: items,
+    );
+  }
+
+  void _reload() {
+    setState(() {
+      _viewFuture = _loadViewData();
+    });
+  }
+
+  Future<void> _clearAll() async {
+    await LocalHistoryStorage.clear();
+    _reload();
+  }
+
+  List<SavedResultItem> _applyFilters(
+    List<SavedResultItem> items,
+    RelationshipProfile? profile,
+  ) {
+    var result = items;
+
+    if (_onlyCurrentProfile && profile != null) {
+      result = result.where((item) => item.profileId == profile.id).toList();
+    }
+
+    if (_typeFilter == 'consult') {
+      result = result.where((item) => item.type == 'consult').toList();
+    } else if (_typeFilter == 'precheck') {
+      result = result.where((item) => item.type == 'precheck').toList();
+    }
+
+    return result;
+  }
+
+  Widget _filterChip({
+    required String value,
+    required String label,
+  }) {
+    final selected = _typeFilter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) {
+        setState(() {
+          _typeFilter = value;
+        });
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('保存した結果'),
+        actions: [
+          IconButton(
+            onPressed: _clearAll,
+            icon: const Icon(Icons.delete_outline),
+            tooltip: '全部消す',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: FutureBuilder<SavedResultsViewData>(
+          future: _viewFuture,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final data = snapshot.data!;
+            final profile = data.activeProfile;
+            final allItems = data.items;
+            final filteredItems = _applyFilters(allItems, profile);
+            final usageProgress = allItems.length / LocalHistoryStorage.maxItems;
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            '保存 ${allItems.length} / ${LocalHistoryStorage.maxItems}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: usageProgress.clamp(0.0, 1.0),
+                            minHeight: 8,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '無料版では直近5件まで保存されます。',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                          if (allItems.length >= LocalHistoryStorage.maxItems) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              '次の保存で古い結果から入れ替わります。',
+                              style: TextStyle(fontSize: 13, color: Colors.black54),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _filterChip(value: 'all', label: 'すべて'),
+                              _filterChip(value: 'consult', label: '相談'),
+                              _filterChip(value: 'precheck', label: '送信前チェック'),
+                            ],
+                          ),
+                          if (profile != null) ...[
+                            const SizedBox(height: 12),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('${profile.displayName} との結果だけ表示'),
+                              subtitle: const Text('アクティブなプロフィールに紐づく保存結果だけ見ます'),
+                              value: _onlyCurrentProfile,
+                              onChanged: (value) {
+                                setState(() {
+                                  _onlyCurrentProfile = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: filteredItems.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              _onlyCurrentProfile && profile != null
+                                  ? 'まだ ${profile.displayName} に紐づく保存結果はありません。'
+                                  : 'この条件に合う保存結果はまだありません。',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filteredItems.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final item = filteredItems[index];
+                            final typeLabel =
+                                item.type == 'precheck' ? '送信前チェック' : '相談';
+
+                            return Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      typeLabel,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.blueGrey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      item.title,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (item.profileName != null &&
+                                        item.profileName!.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '相手: ${item.profileName}',
+                                        style: const TextStyle(
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      item.subtitle,
+                                      style: const TextStyle(color: Colors.black54),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      formatDateTime(item.createdAt),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black45,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      item.bestText,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(height: 1.5),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              Navigator.of(context)
+                                                  .push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          SavedResultDetailScreen(
+                                                        item: item,
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .then((_) => _reload());
+                                            },
+                                            child: const Text('詳細を見る'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () =>
+                                                copyText(context, item.bestText),
+                                            child: const Text('コピー'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class SavedResultDetailScreen extends StatelessWidget {
+  const SavedResultDetailScreen({
+    super.key,
+    required this.item,
+  });
+
+  final SavedResultItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final typeLabel = item.type == 'precheck' ? '送信前チェック' : '相談';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('保存した結果'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(
+              typeLabel,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.blueGrey.shade700,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.title,
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            ),
+            if (item.profileName != null &&
+                item.profileName!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '相手: ${item.profileName}',
+                style: const TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              item.subtitle,
+              style: const TextStyle(fontSize: 16, color: Colors.black54),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              formatDateTime(item.createdAt),
+              style: const TextStyle(fontSize: 13, color: Colors.black45),
+            ),
+            const SizedBox(height: 20),
+            _HeroReplyCard(
+              title: '保存されたベスト案',
+              body: item.bestText,
+              buttonLabel: 'この文をコピー',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class LoadingScreen extends StatelessWidget {
+  const LoadingScreen({
+    super.key,
+    required this.title,
+    required this.lines,
+  });
+
+  final String title;
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                for (final line in lines) ...[
+                  Text(
+                    line,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ErrorScreen extends StatelessWidget {
+  const ErrorScreen({
+    super.key,
+    required this.title,
+    required this.errorText,
+    required this.onRetry,
+  });
+
+  final String title;
+  final String errorText;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '接続に失敗しました',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Text(errorText),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                child: const Text('もう一度試す', style: TextStyle(fontSize: 18)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ConsultationScaffold extends StatelessWidget {
+  const ConsultationScaffold({
+    super.key,
+    required this.currentStep,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    this.meta,
+  });
+
+  final int currentStep;
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final String? meta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('相談する'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '$currentStep / 8',
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: currentStep / 8,
+                  minHeight: 10,
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (meta != null) ...[
+                Text(
+                  meta!,
+                  style: const TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+              const SizedBox(height: 24),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DecisionSummaryCard extends StatelessWidget {
+  const _DecisionSummaryCard({
+    required this.eyebrow,
+    required this.headline,
+    required this.body,
+  });
+
+  final String eyebrow;
+  final String headline;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              eyebrow,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.blueGrey.shade700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              headline,
+              style: const TextStyle(
+                fontSize: 30,
+                height: 1.15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              body,
+              style: const TextStyle(
+                fontSize: 16,
+                height: 1.55,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroReplyCard extends StatelessWidget {
+  const _HeroReplyCard({
+    required this.title,
+    required this.body,
+    required this.buttonLabel,
+    this.helperText,
+  });
+
+  final String title;
+  final String body;
+  final String buttonLabel;
+  final String? helperText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.shade50,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.blueGrey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: const Color(0xFFD8E4EC),
+                ),
+              ),
+              child: Text(
+                body,
+                style: const TextStyle(
+                  fontSize: 18,
+                  height: 1.65,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (helperText != null && helperText!.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                helperText!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => copyText(context, body),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: Text(buttonLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultCard extends StatelessWidget {
+  const _ResultCard({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                height: 1.2,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplyOptionCard extends StatelessWidget {
+  const _ReplyOptionCard({
+    required this.option,
+  });
+
+  final ReplyOption option;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.blueGrey.shade50,
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              option.title,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              option.body,
+              style: const TextStyle(height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton(
+                onPressed: () => copyText(context, option.body),
+                child: const Text('コピー'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SimpleReplyCard extends StatelessWidget {
+  const _SimpleReplyCard({
+    required this.text,
+  });
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.blueGrey.shade50,
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              text,
+              style: const TextStyle(height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton(
+                onPressed: () => copyText(context, text),
+                child: const Text('コピー'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final ButtonStyle elevatedChoiceStyle = ElevatedButton.styleFrom(
+  padding: const EdgeInsets.symmetric(vertical: 18),
+);
+
+const TextStyle choiceTextStyle = TextStyle(fontSize: 18);
+
+List<ThemeQuestion> _buildQuestions({
+  required String relationType,
+  required String theme,
+}) {
+  if (relationType == 'couple' && theme == '連絡頻度') {
+    return const [
+      ThemeQuestion(
+        title: 'どんなことで気まずくなりましたか？',
+        options: [
+          '返信が遅い',
+          '既読無視',
+          '未読が続く',
+          '返信がそっけない',
+          '連絡の回数が少ない',
+          'こちらが責めてしまった',
+          'その他',
+        ],
+      ),
+      ThemeQuestion(
+        title: '主に不満を感じているのは誰ですか？',
+        options: [
+          '自分',
+          '相手',
+          'お互い',
+          'わからない',
+        ],
+      ),
+      ThemeQuestion(
+        title: '今の気持ちに近いものはどれですか？',
+        options: [
+          '不安',
+          '怒り',
+          '寂しさ',
+          '呆れ',
+          '罪悪感',
+          '混乱',
+        ],
+      ),
+    ];
+  }
+
+  if (theme == '言い方がきつい') {
+    return const [
+      ThemeQuestion(
+        title: 'どんな伝わり方が問題でしたか？',
+        options: [
+          '強く責められた',
+          '冷たく返された',
+          '馬鹿にされた感じがした',
+          '正論で詰められた',
+          '自分がきつく言ってしまった',
+          'その他',
+        ],
+      ),
+      ThemeQuestion(
+        title: 'そのやり取りはどこで起きましたか？',
+        options: [
+          'LINE',
+          '電話',
+          '対面',
+          '複数',
+        ],
+      ),
+      ThemeQuestion(
+        title: '今いちばん近い希望はどれですか？',
+        options: [
+          'まず謝りたい',
+          'きつかったことを伝えたい',
+          'これ以上悪化させたくない',
+          '少し距離を置きたい',
+        ],
+      ),
+    ];
+  }
+
+  if (theme == '約束') {
+    return const [
+      ThemeQuestion(
+        title: 'どんな約束でしたか？',
+        options: [
+          '会う約束',
+          '連絡の約束',
+          '時間の約束',
+          'お金の約束',
+          '手伝いの約束',
+          'その他',
+        ],
+      ),
+      ThemeQuestion(
+        title: '約束が守られなかったのは誰ですか？',
+        options: [
+          '自分',
+          '相手',
+          'お互い',
+          'はっきりしない',
+        ],
+      ),
+      ThemeQuestion(
+        title: '今の気持ちに近いものはどれですか？',
+        options: [
+          '裏切られた感じ',
+          '軽く扱われた感じ',
+          '申し訳なさ',
+          '怒り',
+          '悲しさ',
+        ],
+      ),
+    ];
+  }
+
+  return const [
+    ThemeQuestion(
+      title: 'どんなことがきっかけでしたか？',
+      options: [
+        '言い方',
+        '連絡',
+        '約束',
+        'お金',
+        '距離感',
+        '価値観',
+        'その他',
+      ],
+    ),
+    ThemeQuestion(
+      title: '主に不満を感じているのは誰ですか？',
+      options: [
+        '自分',
+        '相手',
+        'お互い',
+        'わからない',
+      ],
+    ),
+    ThemeQuestion(
+      title: '今どうしたいですか？',
+      options: [
+        '謝りたい',
+        '誤解を解きたい',
+        '落ち着かせたい',
+        '距離を置きたい',
+      ],
+    ),
+  ];
+}
