@@ -1996,7 +1996,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
 
   Future<void> _sendConsultation() async {
     try {
-      final uri = Uri.parse('http://127.0.0.1:8000/consult/sessions');
+      final uri = Uri.parse('https://go-men.onrender.com/consult/sessions');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
@@ -2317,7 +2317,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
 
   Future<void> _sendPrecheck() async {
     try {
-      final uri = Uri.parse('http://127.0.0.1:8000/precheck');
+      final uri = Uri.parse('https://go-men.onrender.com/precheck');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
