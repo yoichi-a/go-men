@@ -535,6 +535,60 @@ class SavedResultsViewData {
   final List<SavedResultItem> items;
 }
 
+class DailyUsageStatus {
+  const DailyUsageStatus({required this.dateKey, required this.usedCount});
+
+  static const dailyLimit = 3;
+
+  final String dateKey;
+  final int usedCount;
+
+  int get remainingCount {
+    final remaining = dailyLimit - usedCount;
+    return remaining < 0 ? 0 : remaining;
+  }
+}
+
+class DailyUsageStorage {
+  static const _dateKey = 'go_men_daily_usage_date';
+  static const _countKey = 'go_men_daily_usage_count';
+
+  static String _todayKey() {
+    final now = DateTime.now();
+    final year = now.year.toString().padLeft(4, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  static Future<DailyUsageStatus> loadStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayKey();
+    final storedDate = prefs.getString(_dateKey);
+    final storedCount = prefs.getInt(_countKey) ?? 0;
+
+    if (storedDate != today) {
+      await prefs.setString(_dateKey, today);
+      await prefs.setInt(_countKey, 0);
+      return DailyUsageStatus(dateKey: today, usedCount: 0);
+    }
+
+    return DailyUsageStatus(dateKey: today, usedCount: storedCount);
+  }
+
+  static Future<bool> canUseAi() async {
+    final status = await loadStatus();
+    return status.remainingCount > 0;
+  }
+
+  static Future<void> recordSuccess() async {
+    final prefs = await SharedPreferences.getInstance();
+    final status = await loadStatus();
+    await prefs.setString(_dateKey, status.dateKey);
+    await prefs.setInt(_countKey, status.usedCount + 1);
+  }
+}
+
 class ProfileStorage {
   static const _key = 'go_men_relationship_profile';
 
@@ -567,7 +621,7 @@ class ProfileStorage {
 
 class LocalHistoryStorage {
   static const _key = 'go_men_saved_results';
-  static const maxItems = 5;
+  static const maxItems = 3;
 
   static Future<List<SavedResultItem>> loadItems() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1256,6 +1310,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('関係性を選んでください')));
       return;
+    }
+
+    if (widget.profile == null) {
+      final existingProfile = await ProfileStorage.loadProfile();
+      if (existingProfile != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('無料版ではプロフィールは1件までです。既存プロフィールを編集してください')),
+        );
+        return;
+      }
     }
 
     final profile = RelationshipProfile(
@@ -2620,6 +2685,15 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
   }
 
   Future<void> _sendConsultation() async {
+    final canUseAi = await DailyUsageStorage.canUseAi();
+    if (!canUseAi) {
+      if (!mounted) return;
+      setState(() {
+        errorText = '無料版のAI相談は1日3回までです。明日になるとまた使えます。';
+      });
+      return;
+    }
+
     try {
       final uri = Uri.parse('https://go-men.onrender.com/consult/sessions');
       final profile = widget.draft.selectedProfile;
@@ -2650,6 +2724,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
       );
 
       if (response.statusCode != 200) {
+        if (!mounted) return;
         setState(() {
           errorText = 'APIエラー: ${response.statusCode}\n${response.body}';
         });
@@ -2663,6 +2738,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           ? result.replyOptions.first.body
           : '';
 
+      await DailyUsageStorage.recordSuccess();
       await LocalHistoryStorage.saveItem(
         SavedResultItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -2684,6 +2760,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorText = '接続エラー: $e';
       });
@@ -3285,6 +3362,15 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
   }
 
   Future<void> _sendPrecheck() async {
+    final canUseAi = await DailyUsageStorage.canUseAi();
+    if (!canUseAi) {
+      if (!mounted) return;
+      setState(() {
+        errorText = '無料版のAIチェックは1日3回までです。明日になるとまた使えます。';
+      });
+      return;
+    }
+
     try {
       final uri = Uri.parse('https://go-men.onrender.com/precheck');
       final profile = widget.draft.selectedProfile;
@@ -3297,6 +3383,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'relation_type': widget.draft.relationType,
+          'relation_detail_labels': widget.draft.relationDetails,
           'draft_message': widget.draft.draftMessage,
           'optional_context_text': widget.draft.optionalContextText,
           'profile_context': profile?.toProfileContext(),
@@ -3306,6 +3393,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
       );
 
       if (response.statusCode != 200) {
+        if (!mounted) return;
         setState(() {
           errorText = 'APIエラー: ${response.statusCode}\n${response.body}';
         });
@@ -3315,6 +3403,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
       final result = PrecheckResult.fromJson(decoded);
 
+      await DailyUsageStorage.recordSuccess();
       await LocalHistoryStorage.saveItem(
         SavedResultItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -3337,6 +3426,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorText = '接続エラー: $e';
       });
@@ -4127,7 +4217,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            '無料版では直近5件まで保存されます。',
+                            '無料版では直近3件まで保存されます。',
                             style: TextStyle(color: Colors.black54),
                           ),
                           if (allItems.length >=
