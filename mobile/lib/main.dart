@@ -3976,6 +3976,29 @@ class PrecheckResultScreen extends StatelessWidget {
   }
 }
 
+Future<void> setDebugPlanAndNormalizeTheme(
+  BuildContext context,
+  GoMenPlan plan,
+) async {
+  await GoMenPlanStorage.setPlan(plan);
+
+  final currentTheme = GoMenThemeStorage.notifier.value;
+  final currentSpec = goMenThemeSpecFor(currentTheme);
+
+  if (plan == GoMenPlan.free && currentSpec.isPremium) {
+    await GoMenThemeStorage.setTheme(GoMenThemeMode.ivory);
+  } else {
+    await GoMenThemeStorage.setTheme(currentTheme);
+  }
+
+  if (!context.mounted) return;
+
+  final label = plan == GoMenPlan.pro ? 'Go-men Pro' : '無料版';
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text('プランを $label に切り替えました')));
+}
+
 class SettingsHubScreen extends StatelessWidget {
   const SettingsHubScreen({super.key});
 
@@ -4175,27 +4198,93 @@ class SettingsHubScreen extends StatelessWidget {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '現在の無料版',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('・プロフィールは${PlanLimits.freeProfiles}件まで'),
-                    const SizedBox(height: 6),
-                    Text('・保存は直近${PlanLimits.freeSavedResults}件まで'),
-                    const SizedBox(height: 6),
-                    const Text('・相談 / 送信前チェックは利用可能'),
-                    const SizedBox(height: 6),
-                    const Text('・テーマは Ivory を利用可能'),
-                    const SizedBox(height: 6),
-                    const Text('・Gold / Pink は Go-men Pro で開放'),
-                  ],
+                child: ValueListenableBuilder<GoMenPlan>(
+                  valueListenable: GoMenPlanStorage.notifier,
+                  builder: (context, currentPlan, _) {
+                    final isPro = currentPlan == GoMenPlan.pro;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isPro ? '現在のプラン: Go-men Pro' : '現在のプラン: 無料版',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          isPro
+                              ? '・プロフィール保存: 制限なし'
+                              : '・プロフィール保存: ${PlanLimits.freeProfiles}件まで',
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isPro
+                              ? '・相談結果の保存: 制限なし'
+                              : '・相談結果の保存: 直近${PlanLimits.freeSavedResults}件まで',
+                        ),
+                        const SizedBox(height: 6),
+                        const Text('・相談 / 送信前チェックは利用可能'),
+                        const SizedBox(height: 6),
+                        Text(
+                          isPro
+                              ? '・テーマ: Ivory / Gold / Pink を利用可能'
+                              : '・テーマ: Ivory を利用可能',
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isPro
+                              ? '・今後の相性診断など Pro 機能を解放予定'
+                              : '・Gold / Pink や相性診断は Go-men Pro で解放',
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+                        const Text(
+                          '開発用プラン切り替え',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'App Store 課金導入前の確認用です',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: isPro
+                                    ? () => setDebugPlanAndNormalizeTheme(
+                                        context,
+                                        GoMenPlan.free,
+                                      )
+                                    : null,
+                                child: const Text('無料版にする'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: isPro
+                                    ? null
+                                    : () => setDebugPlanAndNormalizeTheme(
+                                        context,
+                                        GoMenPlan.pro,
+                                      ),
+                                child: const Text('Pro にする'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
