@@ -42,6 +42,12 @@ String extractConsultTheme(String title) {
   return '';
 }
 
+class PlanLimits {
+  static const int freeDailyUses = 3;
+  static const int freeSavedResults = 3;
+  static const int freeProfiles = 1;
+}
+
 List<String> uniquePreserveOrder(List<String> items) {
   final seen = <String>{};
   final result = <String>[];
@@ -538,7 +544,7 @@ class SavedResultsViewData {
 class DailyUsageStatus {
   const DailyUsageStatus({required this.dateKey, required this.usedCount});
 
-  static const dailyLimit = 3;
+  static const dailyLimit = PlanLimits.freeDailyUses;
 
   final String dateKey;
   final int usedCount;
@@ -621,7 +627,7 @@ class ProfileStorage {
 
 class LocalHistoryStorage {
   static const _key = 'go_men_saved_results';
-  static const maxItems = 3;
+  static const maxItems = PlanLimits.freeSavedResults;
 
   static Future<List<SavedResultItem>> loadItems() async {
     final prefs = await SharedPreferences.getInstance();
@@ -871,7 +877,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Text(
-                          '無料版の利用状況',
+                          '保存状況',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.black54,
@@ -905,12 +911,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${profile == null ? 0 : 1} / 1 件',
+                          '${profile == null ? 0 : 1} / ${PlanLimits.freeProfiles} 件',
                           style: const TextStyle(color: Colors.black54),
                         ),
                         const SizedBox(height: 12),
                         const Text(
-                          '有料版では複数プロフィール・保存無制限・相手ごとの履歴整理を開放予定です。',
+                          '関係性ごとの履歴を見ながら、やり取りを整理できます。',
                           style: TextStyle(fontSize: 13, color: Colors.black54),
                         ),
                       ],
@@ -1115,8 +1121,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                const Text(
-                  '無料版ではプロフィールは1件、保存は直近5件までです',
+                Text(
+                  '保存やプロフィールの詳細は設定から確認できます',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
@@ -3794,8 +3800,8 @@ class SettingsHubScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
+                  children: [
+                    const Text(
                       '現在の無料版',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -3803,9 +3809,9 @@ class SettingsHubScreen extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 10),
-                    Text('・プロフィールは1件まで'),
+                    Text('・プロフィールは${PlanLimits.freeProfiles}件まで'),
                     SizedBox(height: 6),
-                    Text('・保存は直近5件まで'),
+                    Text('・保存は直近${PlanLimits.freeSavedResults}件まで'),
                     SizedBox(height: 6),
                     Text('・相談 / 送信前チェックは利用可能'),
                   ],
@@ -3933,8 +3939,8 @@ class ProPlanScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
-                    Text(
+                  children: [
+                    const Text(
                       '無料版',
                       style: TextStyle(
                         fontSize: 20,
@@ -3946,9 +3952,9 @@ class ProPlanScreen extends StatelessWidget {
                     SizedBox(height: 6),
                     Text('・送信前チェック'),
                     SizedBox(height: 6),
-                    Text('・プロフィール 1件まで'),
+                    Text('・プロフィール ${PlanLimits.freeProfiles}件まで'),
                     SizedBox(height: 6),
-                    Text('・保存 直近5件まで'),
+                    Text('・保存 直近${PlanLimits.freeSavedResults}件まで'),
                   ],
                 ),
               ),
@@ -4216,8 +4222,8 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                             minHeight: 8,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '無料版では直近3件まで保存されます。',
+                          Text(
+                            '無料版では直近${PlanLimits.freeSavedResults}件まで保存されます。',
                             style: TextStyle(color: Colors.black54),
                           ),
                           if (allItems.length >=
