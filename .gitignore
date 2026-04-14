@@ -18,3 +18,9 @@ mobile/.packages
 # IDE
 .vscode/
 .idea/mobile/ios_build_log.txt
+
+# Go-men local work files
+review_snapshot/
+mobile/ios_build_log.txt
+*.bak
+*.bak_*
