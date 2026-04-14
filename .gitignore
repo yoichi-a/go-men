@@ -17,4 +17,4 @@ mobile/.packages
 
 # IDE
 .vscode/
-.idea/
+.idea/mobile/ios_build_log.txt
