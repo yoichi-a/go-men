@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await GoMenThemeStorage.ensureLoaded();
   runApp(const GoMenApp());
 }
 
@@ -113,24 +115,155 @@ List<String> buildTrendBullets(List<SavedResultItem> items) {
   return bullets.take(3).toList();
 }
 
+enum GoMenThemeMode { ivory, gold, pink }
+
+class GoMenThemeSpec {
+  const GoMenThemeSpec({
+    required this.mode,
+    required this.label,
+    required this.isPremium,
+    required this.backgroundTop,
+    required this.backgroundBottom,
+    required this.cardColor,
+    required this.accentColor,
+    required this.previewTextColor,
+    required this.description,
+  });
+
+  final GoMenThemeMode mode;
+  final String label;
+  final bool isPremium;
+  final Color backgroundTop;
+  final Color backgroundBottom;
+  final Color cardColor;
+  final Color accentColor;
+  final Color previewTextColor;
+  final String description;
+}
+
+const bool kGoMenPremiumUnlocked = false;
+
+GoMenThemeSpec goMenThemeSpecFor(GoMenThemeMode mode) {
+  switch (mode) {
+    case GoMenThemeMode.gold:
+      return const GoMenThemeSpec(
+        mode: GoMenThemeMode.gold,
+        label: 'Gold',
+        isPremium: true,
+        backgroundTop: Color(0xFF161311),
+        backgroundBottom: Color(0xFF26201B),
+        cardColor: Color(0xFF221C17),
+        accentColor: Color(0xFFD6A84A),
+        previewTextColor: Colors.white,
+        description: '落ち着いた高級感のあるプレミアムテーマ',
+      );
+    case GoMenThemeMode.pink:
+      return const GoMenThemeSpec(
+        mode: GoMenThemeMode.pink,
+        label: 'Pink',
+        isPremium: true,
+        backgroundTop: Color(0xFFFFF2F7),
+        backgroundBottom: Color(0xFFFFE0EC),
+        cardColor: Colors.white,
+        accentColor: Color(0xFFE75480),
+        previewTextColor: Color(0xFF7A274A),
+        description: '恋愛相談に寄せたやわらかいプレミアムテーマ',
+      );
+    case GoMenThemeMode.ivory:
+      return const GoMenThemeSpec(
+        mode: GoMenThemeMode.ivory,
+        label: 'Ivory',
+        isPremium: false,
+        backgroundTop: Color(0xFFFBF7F0),
+        backgroundBottom: Color(0xFFF3ECE2),
+        cardColor: Colors.white,
+        accentColor: Color(0xFFC6A87A),
+        previewTextColor: Color(0xFF5E4A34),
+        description: 'Go-men の標準テーマ。やさしく上品な印象',
+      );
+  }
+}
+
+ThemeData buildGoMenTheme(GoMenThemeSpec spec) {
+  final isDark = spec.mode == GoMenThemeMode.gold;
+
+  return ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: spec.accentColor,
+      brightness: isDark ? Brightness.dark : Brightness.light,
+    ),
+    useMaterial3: true,
+    scaffoldBackgroundColor: spec.backgroundBottom,
+    cardTheme: CardThemeData(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: spec.cardColor,
+      surfaceTintColor: Colors.transparent,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: spec.cardColor.withValues(alpha: isDark ? 0.90 : 0.78),
+      foregroundColor: isDark ? Colors.white : Colors.black87,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: isDark ? const Color(0xFF2E2925) : Colors.black87,
+      contentTextStyle: const TextStyle(color: Colors.white),
+    ),
+  );
+}
+
+class GoMenThemeStorage {
+  static const _key = 'go_men_theme_mode';
+  static final ValueNotifier<GoMenThemeMode> notifier = ValueNotifier(
+    GoMenThemeMode.ivory,
+  );
+
+  static bool canUse(GoMenThemeMode mode) {
+    return mode == GoMenThemeMode.ivory || kGoMenPremiumUnlocked;
+  }
+
+  static Future<void> ensureLoaded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+
+    final loaded =
+        GoMenThemeMode.values.where((e) => e.name == raw).firstOrNull ??
+        GoMenThemeMode.ivory;
+
+    notifier.value = canUse(loaded) ? loaded : GoMenThemeMode.ivory;
+  }
+
+  static Future<void> setTheme(GoMenThemeMode mode) async {
+    final safeMode = canUse(mode) ? mode : GoMenThemeMode.ivory;
+    notifier.value = safeMode;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, safeMode.name);
+  }
+}
+
 class GoMenApp extends StatelessWidget {
   const GoMenApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Go-men',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF6F8FB),
-        cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
-      ),
-      builder: (context, child) {
-        return _AppViewport(child: child ?? const SizedBox.shrink());
+    return ValueListenableBuilder<GoMenThemeMode>(
+      valueListenable: GoMenThemeStorage.notifier,
+      builder: (context, mode, _) {
+        final spec = goMenThemeSpecFor(mode);
+
+        return MaterialApp(
+          title: 'Go-men',
+          debugShowCheckedModeBanner: false,
+          theme: buildGoMenTheme(spec),
+          builder: (context, child) {
+            return _AppViewport(child: child ?? const SizedBox.shrink());
+          },
+          home: const HomeScreen(),
+        );
       },
-      home: const HomeScreen(),
     );
   }
 }
@@ -144,20 +277,75 @@ class _AppViewport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFEFF3F8),
+    final spec = goMenThemeSpecFor(GoMenThemeStorage.notifier.value);
+    final isDark = spec.mode == GoMenThemeMode.gold;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [spec.backgroundTop, spec.backgroundBottom],
+        ),
+      ),
       child: SafeArea(
         top: false,
         bottom: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kAppMaxWidth),
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: Color(0xFFF6F8FB)),
-              child: child,
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -80,
+                  right: -30,
+                  child: _ThemeGlow(
+                    size: 220,
+                    color: spec.accentColor.withValues(
+                      alpha: isDark ? 0.22 : 0.16,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 120,
+                  left: -70,
+                  child: _ThemeGlow(
+                    size: 180,
+                    color: spec.accentColor.withValues(
+                      alpha: isDark ? 0.14 : 0.10,
+                    ),
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: spec.backgroundBottom.withValues(
+                      alpha: isDark ? 0.86 : 0.72,
+                    ),
+                  ),
+                  child: child,
+                ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ThemeGlow extends StatelessWidget {
+  const _ThemeGlow({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       ),
     );
   }
@@ -3739,14 +3927,150 @@ class PrecheckResultScreen extends StatelessWidget {
 class SettingsHubScreen extends StatelessWidget {
   const SettingsHubScreen({super.key});
 
+  Future<void> _handleThemeTap(
+    BuildContext context,
+    GoMenThemeMode mode,
+  ) async {
+    final spec = goMenThemeSpecFor(mode);
+
+    if (!GoMenThemeStorage.canUse(mode)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${spec.label} テーマは Go-men Pro で利用できます')),
+      );
+      return;
+    }
+
+    await GoMenThemeStorage.setTheme(mode);
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${spec.label} テーマに変更しました')));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final themes = [
+      goMenThemeSpecFor(GoMenThemeMode.ivory),
+      goMenThemeSpecFor(GoMenThemeMode.gold),
+      goMenThemeSpecFor(GoMenThemeMode.pink),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('設定')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ValueListenableBuilder<GoMenThemeMode>(
+                  valueListenable: GoMenThemeStorage.notifier,
+                  builder: (context, currentMode, _) {
+                    final currentSpec = goMenThemeSpecFor(currentMode);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'テーマ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Ivory は通常版、Gold / Pink は Go-men Pro で利用できます',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.black.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                currentSpec.backgroundTop,
+                                currentSpec.backgroundBottom,
+                              ],
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: currentSpec.accentColor.withValues(
+                                    alpha: 0.18,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  currentSpec.label.substring(0, 1),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22,
+                                    color: currentSpec.previewTextColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '現在のテーマ',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      currentSpec.label,
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: currentSpec.previewTextColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        ...themes.map(
+                          (theme) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _ThemeChoiceCard(
+                              spec: theme,
+                              isSelected: currentMode == theme.mode,
+                              isLocked:
+                                  theme.isPremium && !kGoMenPremiumUnlocked,
+                              onTap: () => _handleThemeTap(context, theme.mode),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             _SettingsNavCard(
               icon: Icons.privacy_tip_outlined,
               title: 'プライバシーポリシー',
@@ -3808,12 +4132,16 @@ class SettingsHubScreen extends StatelessWidget {
                         fontSize: 18,
                       ),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                     Text('・プロフィールは${PlanLimits.freeProfiles}件まで'),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text('・保存は直近${PlanLimits.freeSavedResults}件まで'),
-                    SizedBox(height: 6),
-                    Text('・相談 / 送信前チェックは利用可能'),
+                    const SizedBox(height: 6),
+                    const Text('・相談 / 送信前チェックは利用可能'),
+                    const SizedBox(height: 6),
+                    const Text('・テーマは Ivory を利用可能'),
+                    const SizedBox(height: 6),
+                    const Text('・Gold / Pink は Go-men Pro で開放'),
                   ],
                 ),
               ),
@@ -3847,6 +4175,115 @@ class _SettingsNavCard extends StatelessWidget {
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _ThemeChoiceCard extends StatelessWidget {
+  const _ThemeChoiceCard({
+    required this.spec,
+    required this.isSelected,
+    required this.isLocked,
+    required this.onTap,
+  });
+
+  final GoMenThemeSpec spec;
+  final bool isSelected;
+  final bool isLocked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [spec.backgroundTop, spec.backgroundBottom],
+                  ),
+                  border: Border.all(
+                    color: spec.accentColor.withValues(alpha: 0.25),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Go',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: spec.previewTextColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          spec.label,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (spec.isPremium)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: spec.accentColor.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Premium',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: spec.accentColor,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      spec.description,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black.withValues(alpha: 0.62),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (isSelected)
+                const Icon(Icons.check_circle, color: Colors.green)
+              else if (isLocked)
+                Icon(Icons.lock_outline, color: spec.accentColor)
+              else
+                const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
       ),
     );
   }
