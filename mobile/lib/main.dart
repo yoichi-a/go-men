@@ -327,6 +327,7 @@ class PrecheckDraft {
   const PrecheckDraft({
     this.relationType,
     this.relationLabel,
+    this.relationDetails = const [],
     this.draftMessage,
     this.optionalContextText,
     this.selectedProfile,
@@ -334,6 +335,7 @@ class PrecheckDraft {
 
   final String? relationType;
   final String? relationLabel;
+  final List<String> relationDetails;
   final String? draftMessage;
   final String? optionalContextText;
   final RelationshipProfile? selectedProfile;
@@ -341,6 +343,7 @@ class PrecheckDraft {
   PrecheckDraft copyWith({
     String? relationType,
     String? relationLabel,
+    List<String>? relationDetails,
     String? draftMessage,
     String? optionalContextText,
     RelationshipProfile? selectedProfile,
@@ -348,6 +351,7 @@ class PrecheckDraft {
     return PrecheckDraft(
       relationType: relationType ?? this.relationType,
       relationLabel: relationLabel ?? this.relationLabel,
+      relationDetails: relationDetails ?? this.relationDetails,
       draftMessage: draftMessage ?? this.draftMessage,
       optionalContextText: optionalContextText ?? this.optionalContextText,
       selectedProfile: selectedProfile ?? this.selectedProfile,
@@ -2554,10 +2558,274 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
   }
 }
 
+class PrecheckCoupleSelfGenderScreen extends StatelessWidget {
+  const PrecheckCoupleSelfGenderScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'ここが細かいほど、文の整え方が自然になります',
+      question: 'あなたは？',
+      options: const ['男性', '女性', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckCouplePartnerGenderScreen(
+              draft: draft.copyWith(relationDetails: ['自分: $value']),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckCouplePartnerGenderScreen extends StatelessWidget {
+  const PrecheckCouplePartnerGenderScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'ここが細かいほど、文の整え方が自然になります',
+      question: '相手は？',
+      options: const ['男性', '女性', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFriendContextScreen extends StatelessWidget {
+  const PrecheckFriendContextScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '友人の種類で、言い方の自然さが変わります',
+      question: 'どこでの友人ですか？',
+      options: const ['学校', '職場', '地元', '趣味コミュニティ', 'そのほか'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(relationDetails: ['$valueの友人']),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFamilyTypeScreen extends StatelessWidget {
+  const PrecheckFamilyTypeScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '家族の中の関係で、整えるべきトーンが変わります',
+      question: '家族の中ではどの関係ですか？',
+      options: const ['親子', '兄弟姉妹', '義家族', 'そのほか'],
+      onSelected: (context, value) {
+        if (value == '親子') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PrecheckFamilyParentRoleScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_parent_child',
+                  relationLabel: '家族 / 親子',
+                  relationDetails: ['親子'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (value == '兄弟姉妹') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PrecheckFamilySiblingScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_sibling',
+                  relationLabel: '家族 / 兄弟姉妹',
+                  relationDetails: ['兄弟姉妹'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (value == '義家族') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PrecheckFamilyInlawScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_inlaw',
+                  relationLabel: '家族 / 義家族',
+                  relationDetails: ['義家族'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(
+                relationType: 'family_other',
+                relationLabel: '家族 / その他',
+                relationDetails: ['家族 / その他'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFamilyParentRoleScreen extends StatelessWidget {
+  const PrecheckFamilyParentRoleScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '親子でも立場で整え方が変わります',
+      question: 'あなたはどちらですか？',
+      options: const ['親', '子'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckFamilyParentGenderScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '自分: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFamilyParentGenderScreen extends StatelessWidget {
+  const PrecheckFamilyParentGenderScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'ここも言葉選びに影響します',
+      question: '親は？',
+      options: const ['母', '父', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '親: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFamilySiblingScreen extends StatelessWidget {
+  const PrecheckFamilySiblingScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '兄姉か弟妹かでも距離感が変わります',
+      question: '相手は？',
+      options: const ['兄', '姉', '弟', '妹', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PrecheckFamilyInlawScreen extends StatelessWidget {
+  const PrecheckFamilyInlawScreen({super.key, required this.draft});
+
+  final PrecheckDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '義家族の中でも相手との距離感が変わります',
+      question: '相手は？',
+      options: const ['義母', '義父', '義兄弟姉妹', 'そのほか', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(
+              initialDraft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class PrecheckInputScreen extends StatefulWidget {
-  const PrecheckInputScreen({super.key, this.initialProfile});
+  const PrecheckInputScreen({
+    super.key,
+    this.initialProfile,
+    this.initialDraft,
+  });
 
   final RelationshipProfile? initialProfile;
+  final PrecheckDraft? initialDraft;
 
   @override
   State<PrecheckInputScreen> createState() => _PrecheckInputScreenState();
@@ -2566,16 +2834,28 @@ class PrecheckInputScreen extends StatefulWidget {
 class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
   String? _relationType;
   String? _relationLabel;
+  List<String> _relationDetails = [];
   late final TextEditingController _draftController;
   late final TextEditingController _contextController;
 
   @override
   void initState() {
     super.initState();
-    _draftController = TextEditingController();
-    _contextController = TextEditingController();
-    _relationType = widget.initialProfile?.relationType;
-    _relationLabel = widget.initialProfile?.relationLabel;
+    _draftController = TextEditingController(
+      text: widget.initialDraft?.draftMessage ?? '',
+    );
+    _contextController = TextEditingController(
+      text: widget.initialDraft?.optionalContextText ?? '',
+    );
+    _relationType =
+        widget.initialDraft?.relationType ??
+        widget.initialProfile?.relationType;
+    _relationLabel =
+        widget.initialDraft?.relationLabel ??
+        widget.initialProfile?.relationLabel;
+    _relationDetails = List<String>.from(
+      widget.initialDraft?.relationDetails ?? const <String>[],
+    );
   }
 
   @override
@@ -2585,16 +2865,61 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     super.dispose();
   }
 
-  void _selectRelation(String type, String label) {
-    setState(() {
-      _relationType = type;
-      _relationLabel = label;
-    });
+  void _selectRelation(String relationType, String label) {
+    late final Widget nextScreen;
+
+    switch (relationType) {
+      case 'couple':
+        nextScreen = PrecheckCoupleSelfGenderScreen(
+          draft: PrecheckDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+            selectedProfile: widget.initialProfile,
+          ),
+        );
+        break;
+      case 'friend':
+        nextScreen = PrecheckFriendContextScreen(
+          draft: PrecheckDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+            selectedProfile: widget.initialProfile,
+          ),
+        );
+        break;
+      case 'family':
+        nextScreen = PrecheckFamilyTypeScreen(
+          draft: PrecheckDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+            selectedProfile: widget.initialProfile,
+          ),
+        );
+        break;
+      case 'other':
+      default:
+        nextScreen = PrecheckInputScreen(
+          initialDraft: PrecheckDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+            selectedProfile: widget.initialProfile,
+          ),
+        );
+        break;
+    }
+
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => nextScreen));
   }
 
   void _submit() {
     final draftMessage = _draftController.text.trim();
     final contextText = _contextController.text.trim();
+    final profile =
+        widget.initialDraft?.selectedProfile ?? widget.initialProfile;
 
     if (_relationType == null || _relationLabel == null) {
       ScaffoldMessenger.of(
@@ -2613,9 +2938,10 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     final draft = PrecheckDraft(
       relationType: _relationType,
       relationLabel: _relationLabel,
+      relationDetails: _relationDetails,
       draftMessage: draftMessage,
       optionalContextText: contextText.isEmpty ? null : contextText,
-      selectedProfile: widget.initialProfile,
+      selectedProfile: profile,
     );
 
     Navigator.of(context).push(
@@ -2623,35 +2949,48 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     );
   }
 
-  Widget _relationButton(String type, String label) {
-    final selected = _relationType == type;
-
-    if (selected) {
-      return ElevatedButton(
-        onPressed: widget.initialProfile != null
-            ? null
-            : () => _selectRelation(type, label),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-        child: Text(label),
-      );
-    }
-
-    return OutlinedButton(
-      onPressed: widget.initialProfile != null
-          ? null
-          : () => _selectRelation(type, label),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-      child: Text(label),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final profile = widget.initialProfile;
+    final profile =
+        widget.initialDraft?.selectedProfile ?? widget.initialProfile;
+
+    if (_relationType == null || _relationLabel == null) {
+      return ConsultationScaffold(
+        currentStep: 1,
+        title: '相手との関係を教えてください',
+        subtitle: '送る前チェックでも、関係性で言い換え方が変わります',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton(
+              onPressed: () => _selectRelation('couple', '恋人・パートナー'),
+              style: elevatedChoiceStyle,
+              child: const Text('恋人・パートナー', style: choiceTextStyle),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _selectRelation('friend', '友人'),
+              style: elevatedChoiceStyle,
+              child: const Text('友人', style: choiceTextStyle),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _selectRelation('family', '家族'),
+              style: elevatedChoiceStyle,
+              child: const Text('家族', style: choiceTextStyle),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => _selectRelation('other', 'その他'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              child: const Text('その他', style: choiceTextStyle),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('送る前にチェックする')),
@@ -2690,19 +3029,42 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               ),
               const SizedBox(height: 20),
             ],
-            const Text(
-              '相手との関係',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '読み取った関係性',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _relationLabel ?? '',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_relationDetails.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      ..._relationDetails.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text('・$item'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 12),
-            _relationButton('couple', '恋人・パートナー'),
-            const SizedBox(height: 10),
-            _relationButton('friend', '友人'),
-            const SizedBox(height: 10),
-            _relationButton('family', '家族'),
-            const SizedBox(height: 10),
-            _relationButton('other', 'その他'),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
             const Text(
               '送ろうとしている文',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -2937,6 +3299,12 @@ class ResultScreen extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (_) => PrecheckInputScreen(
                       initialProfile: draft.selectedProfile,
+                      initialDraft: PrecheckDraft(
+                        relationType: draft.relationType,
+                        relationLabel: draft.relationLabel,
+                        relationDetails: draft.relationDetails,
+                        selectedProfile: draft.selectedProfile,
+                      ),
                     ),
                   ),
                 );

@@ -54,6 +54,7 @@ class ConsultSessionRequest(BaseModel):
 
 class PrecheckRequest(BaseModel):
     relation_type: str
+    relation_detail_labels: List[str] = Field(default_factory=list)
     draft_message: str
     optional_context_text: Optional[str] = None
     profile_context: Optional[str] = None
@@ -541,6 +542,7 @@ def build_precheck_prompt(request: PrecheckRequest) -> str:
 
 入力:
 relation_type: {request.relation_type}
+relation_detail_labels: {request.relation_detail_labels}
 draft_message: {request.draft_message}
 補足情報:
 {context_block}
