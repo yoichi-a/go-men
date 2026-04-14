@@ -23,6 +23,11 @@ Future<void> copyText(
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
 }
 
+Color goMenMutedTextColor(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return isDark ? const Color(0xFFE7D7BE) : const Color(0xFF5E6975);
+}
+
 String formatDateTime(String isoString) {
   try {
     final dt = DateTime.parse(isoString).toLocal();
@@ -1004,7 +1009,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
                   Text(
                     profile.relationSummaryLabel,
-                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: goMenMutedTextColor(context),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   _ProfileDetailItem(
@@ -1041,7 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           )
                           .then((_) => _reloadDashboard());
                     },
-                    child: const Text('このプロフィールを編集する'),
+                    child: Text('このプロフィールを編集する'),
                   ),
                 ],
               ),
@@ -1081,16 +1089,19 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               children: [
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Go-men',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   '関係を壊さないための、次の一手を整える',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: goMenMutedTextColor(context),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Align(
@@ -1106,7 +1117,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           .then((_) => _reloadDashboard());
                     },
                     icon: const Icon(Icons.settings_outlined),
-                    label: const Text('設定・ポリシー'),
+                    label: Text('設定・ポリシー'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1116,7 +1127,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
+                        Text(
                           '保存状況',
                           style: TextStyle(
                             fontSize: 14,
@@ -1125,7 +1136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           '保存件数',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
@@ -1140,7 +1151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(color: Colors.black54),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           'プロフィール件数',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
@@ -1155,9 +1166,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(color: Colors.black54),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           '関係性ごとの履歴を見ながら、やり取りを整理できます。',
-                          style: TextStyle(fontSize: 13, color: Colors.black54),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: goMenMutedTextColor(context),
+                          ),
                         ),
                       ],
                     ),
@@ -1171,7 +1185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
+                          Text(
                             '使用中の関係性プロフィール',
                             style: TextStyle(
                               fontSize: 14,
@@ -1205,7 +1219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: OutlinedButton(
                                   onPressed: () => _showProfileDetail(profile),
-                                  child: const Text('詳しく見る'),
+                                  child: Text('詳しく見る'),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -1224,7 +1238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         )
                                         .then((_) => _reloadDashboard());
                                   },
-                                  child: const Text('この相手の履歴'),
+                                  child: Text('この相手の履歴'),
                                 ),
                               ),
                             ],
@@ -1240,7 +1254,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
+                          Text(
                             'この相手との最近の傾向',
                             style: TextStyle(
                               fontSize: 14,
@@ -1336,10 +1350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
-                  child: const Text(
-                    '保存した結果を見る',
-                    style: TextStyle(fontSize: 18),
-                  ),
+                  child: Text('保存した結果を見る', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton(
@@ -1364,10 +1375,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   '保存やプロフィールの詳細は設定から確認できます',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: goMenMutedTextColor(context),
+                  ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'MVP v1.1',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.black45, fontSize: 14),
@@ -1659,7 +1673,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           children: [
-            const Text(
+            Text(
               '相手の名前・呼び名',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1672,7 +1686,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '関係性',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1686,12 +1700,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             _relationButton('other', 'その他'),
             if (_relationDetailGroups.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'もう少し詳しく',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'ここを入れておくと、相談時の言い換えがより相手に合いやすくなります',
                 style: TextStyle(
                   fontSize: 14,
@@ -1725,7 +1739,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ],
             ],
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '傷つきやすい言い方',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1739,7 +1753,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '通りやすい伝え方',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1753,7 +1767,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '距離感の傾向',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1767,7 +1781,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'よく揉めるテーマ',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1781,7 +1795,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '避けたいワード',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1795,7 +1809,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '補足メモ',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1815,10 +1829,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                'このプロフィールを保存する',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: Text('このプロフィールを保存する', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -1892,19 +1903,19 @@ class RelationTypeScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () => _selectRelation(context, 'couple', '恋人・パートナー'),
             style: elevatedChoiceStyle,
-            child: const Text('恋人・パートナー', style: choiceTextStyle),
+            child: Text('恋人・パートナー', style: choiceTextStyle),
           ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () => _selectRelation(context, 'friend', '友人'),
             style: elevatedChoiceStyle,
-            child: const Text('友人', style: choiceTextStyle),
+            child: Text('友人', style: choiceTextStyle),
           ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () => _selectRelation(context, 'family', '家族'),
             style: elevatedChoiceStyle,
-            child: const Text('家族', style: choiceTextStyle),
+            child: Text('家族', style: choiceTextStyle),
           ),
           const SizedBox(height: 16),
           OutlinedButton(
@@ -1912,7 +1923,7 @@ class RelationTypeScreen extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 18),
             ),
-            child: const Text('その他', style: choiceTextStyle),
+            child: Text('その他', style: choiceTextStyle),
           ),
         ],
       ),
@@ -2727,7 +2738,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
           TextButton.icon(
             onPressed: () => _removeScreenshotAt(index),
             icon: const Icon(Icons.close, size: 16),
-            label: const Text('削除'),
+            label: Text('削除'),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 8),
               minimumSize: const Size.fromHeight(36),
@@ -2763,13 +2774,16 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'スクリーンショットを1枚ずつ追加できます。',
-                style: TextStyle(fontSize: 13, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: goMenMutedTextColor(context),
+                ),
               ),
               const SizedBox(height: 16),
               if (_pickedScreenshots.isNotEmpty) ...[
-                const Text(
+                Text(
                   '追加したスクリーンショット',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
@@ -2797,9 +2811,12 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 '個人情報が含まれる場合があります。必要に応じて隠してから追加してください。',
-                style: TextStyle(fontSize: 13, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: goMenMutedTextColor(context),
+                ),
               ),
               const SizedBox(height: 24),
               OutlinedButton(
@@ -2807,7 +2824,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 18),
                 ),
-                child: const Text('やり取りなしで進む', style: TextStyle(fontSize: 18)),
+                child: Text('やり取りなしで進む', style: TextStyle(fontSize: 18)),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -2893,9 +2910,12 @@ class _NoteScreenState extends State<NoteScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '補足はなくても大丈夫です。',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 13,
+                color: goMenMutedTextColor(context),
+              ),
             ),
             const Spacer(),
             ElevatedButton(
@@ -2903,7 +2923,7 @@ class _NoteScreenState extends State<NoteScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('この内容で相談する', style: TextStyle(fontSize: 18)),
+              child: Text('この内容で相談する', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -3437,19 +3457,19 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
             ElevatedButton(
               onPressed: () => _selectRelation('couple', '恋人・パートナー'),
               style: elevatedChoiceStyle,
-              child: const Text('恋人・パートナー', style: choiceTextStyle),
+              child: Text('恋人・パートナー', style: choiceTextStyle),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _selectRelation('friend', '友人'),
               style: elevatedChoiceStyle,
-              child: const Text('友人', style: choiceTextStyle),
+              child: Text('友人', style: choiceTextStyle),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _selectRelation('family', '家族'),
               style: elevatedChoiceStyle,
-              child: const Text('家族', style: choiceTextStyle),
+              child: Text('家族', style: choiceTextStyle),
             ),
             const SizedBox(height: 16),
             OutlinedButton(
@@ -3457,7 +3477,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('その他', style: choiceTextStyle),
+              child: Text('その他', style: choiceTextStyle),
             ),
           ],
         ),
@@ -3465,7 +3485,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('送る前にチェックする')),
+      appBar: AppBar(title: Text('送る前にチェックする')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -3477,7 +3497,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '適用中のプロフィール',
                         style: TextStyle(
                           fontSize: 14,
@@ -3507,7 +3527,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '読み取った関係性',
                       style: TextStyle(
                         fontSize: 14,
@@ -3537,7 +3557,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               '送ろうとしている文',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
@@ -3553,7 +3573,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '補足（任意）',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -3569,9 +3589,12 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '相手にどう聞こえるか、今送ってよいか、ベストな修正文を出します。',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 13,
+                color: goMenMutedTextColor(context),
+              ),
             ),
             const SizedBox(height: 28),
             ElevatedButton(
@@ -3579,7 +3602,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('この文をチェックする', style: TextStyle(fontSize: 18)),
+              child: Text('この文をチェックする', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
           ],
@@ -3712,7 +3735,7 @@ class ResultScreen extends StatelessWidget {
         : <ReplyOption>[];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('相談結果')),
+      appBar: AppBar(title: Text('相談結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -3824,7 +3847,7 @@ class ResultScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('自分の文をチェックする', style: TextStyle(fontSize: 18)),
+              child: Text('自分の文をチェックする', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -3837,7 +3860,7 @@ class ResultScreen extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('ホームに戻る', style: TextStyle(fontSize: 18)),
+              child: Text('ホームに戻る', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -3863,7 +3886,7 @@ class PrecheckResultScreen extends StatelessWidget {
         : <String>[];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('送信前チェック結果')),
+      appBar: AppBar(title: Text('送信前チェック結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -3954,7 +3977,7 @@ class PrecheckResultScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('相談モードでも見る', style: TextStyle(fontSize: 18)),
+              child: Text('相談モードでも見る', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -3967,7 +3990,7 @@ class PrecheckResultScreen extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text('ホームに戻る', style: TextStyle(fontSize: 18)),
+              child: Text('ホームに戻る', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -4033,7 +4056,7 @@ class SettingsHubScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('設定')),
+      appBar: AppBar(title: Text('設定')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -4049,7 +4072,7 @@ class SettingsHubScreen extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'テーマ',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -4104,7 +4127,7 @@ class SettingsHubScreen extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                       '現在のテーマ',
                                       style: TextStyle(
                                         fontSize: 12,
@@ -4226,7 +4249,7 @@ class SettingsHubScreen extends StatelessWidget {
                               : '・相談結果の保存: 直近${PlanLimits.freeSavedResults}件まで',
                         ),
                         const SizedBox(height: 6),
-                        const Text('・相談 / 送信前チェックは利用可能'),
+                        Text('・相談 / 送信前チェックは利用可能'),
                         const SizedBox(height: 6),
                         Text(
                           isPro
@@ -4242,7 +4265,7 @@ class SettingsHubScreen extends StatelessWidget {
                         const SizedBox(height: 16),
                         const Divider(height: 1),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           '開発用プラン切り替え',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
@@ -4250,7 +4273,7 @@ class SettingsHubScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'App Store 課金導入前の確認用です',
                           style: TextStyle(fontSize: 13),
                         ),
@@ -4265,7 +4288,7 @@ class SettingsHubScreen extends StatelessWidget {
                                         GoMenPlan.free,
                                       )
                                     : null,
-                                child: const Text('無料版にする'),
+                                child: Text('無料版にする'),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -4277,7 +4300,7 @@ class SettingsHubScreen extends StatelessWidget {
                                         context,
                                         GoMenPlan.pro,
                                       ),
-                                child: const Text('Pro にする'),
+                                child: Text('Pro にする'),
                               ),
                             ),
                           ],
@@ -4508,7 +4531,7 @@ class ProPlanScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Go-men Pro')),
+      appBar: AppBar(title: Text('Go-men Pro')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -4519,7 +4542,7 @@ class ProPlanScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       '無料版',
                       style: TextStyle(
                         fontSize: 20,
@@ -4570,7 +4593,7 @@ class ProPlanScreen extends StatelessWidget {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: const Text(
+                child: Text(
                   '現時点ではPro課金はまだ未接続です。まずは無料版の価値を固め、その後に有料導線を自然に実装する想定です。',
                   style: TextStyle(height: 1.55),
                 ),
@@ -4591,7 +4614,7 @@ class ContactScreen extends StatelessWidget {
     const contactEmail = 'gomen.mendly@gmail.com';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('お問い合わせ')),
+      appBar: AppBar(title: Text('お問い合わせ')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -4602,7 +4625,7 @@ class ContactScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       'お問い合わせ先',
                       style: TextStyle(
                         fontSize: 20,
@@ -4610,12 +4633,12 @@ class ContactScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(contactEmail, style: TextStyle(fontSize: 16)),
+                    Text(contactEmail, style: TextStyle(fontSize: 16)),
                     const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: () =>
                           copyText(context, contactEmail, label: '連絡先をコピーしました'),
-                      child: const Text('連絡先をコピー'),
+                      child: Text('連絡先をコピー'),
                     ),
                   ],
                 ),
@@ -4757,7 +4780,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('保存した結果'),
+        title: Text('保存した結果'),
         actions: [
           IconButton(
             onPressed: _clearAll,
@@ -4808,7 +4831,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                           if (allItems.length >=
                               LocalHistoryStorage.maxItems) ...[
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               '次の保存で古い結果から入れ替わります。',
                               style: TextStyle(
                                 fontSize: 13,
@@ -4831,7 +4854,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: Text('${profile.displayName} との結果だけ表示'),
-                              subtitle: const Text('アクティブなプロフィールに紐づく保存結果だけ見ます'),
+                              subtitle: Text('アクティブなプロフィールに紐づく保存結果だけ見ます'),
                               value: _onlyCurrentProfile,
                               onChanged: (value) {
                                 setState(() {
@@ -4947,7 +4970,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                                   )
                                                   .then((_) => _reload());
                                             },
-                                            child: const Text('詳細を見る'),
+                                            child: Text('詳細を見る'),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -4957,7 +4980,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                               context,
                                               item.bestText,
                                             ),
-                                            child: const Text('コピー'),
+                                            child: Text('コピー'),
                                           ),
                                         ),
                                       ],
@@ -4988,7 +5011,7 @@ class SavedResultDetailScreen extends StatelessWidget {
     final typeLabel = item.type == 'precheck' ? '送信前チェック' : '相談';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('保存した結果')),
+      appBar: AppBar(title: Text('保存した結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -5011,13 +5034,19 @@ class SavedResultDetailScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '相手: ${item.profileName}',
-                style: const TextStyle(fontSize: 16, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: goMenMutedTextColor(context),
+                ),
               ),
             ],
             const SizedBox(height: 8),
             Text(
               item.subtitle,
-              style: const TextStyle(fontSize: 16, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 16,
+                color: goMenMutedTextColor(context),
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -5068,7 +5097,10 @@ class LoadingScreen extends StatelessWidget {
                   Text(
                     line,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: goMenMutedTextColor(context),
+                    ),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -5103,7 +5135,7 @@ class ErrorScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 '接続に失敗しました',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
@@ -5115,7 +5147,7 @@ class ErrorScreen extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 18),
                 ),
-                child: const Text('もう一度試す', style: TextStyle(fontSize: 18)),
+                child: Text('もう一度試す', style: TextStyle(fontSize: 18)),
               ),
             ],
           ),
@@ -5144,7 +5176,7 @@ class ConsultationScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('相談する')),
+      appBar: AppBar(title: Text('相談する')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -5153,7 +5185,10 @@ class ConsultationScaffold extends StatelessWidget {
             children: [
               Text(
                 '$currentStep / 8',
-                style: const TextStyle(color: Colors.black54, fontSize: 13),
+                style: TextStyle(
+                  color: goMenMutedTextColor(context),
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 8),
               ClipRRect(
@@ -5167,7 +5202,10 @@ class ConsultationScaffold extends StatelessWidget {
               if (meta != null) ...[
                 Text(
                   meta!,
-                  style: const TextStyle(fontSize: 16, color: Colors.black54),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: goMenMutedTextColor(context),
+                  ),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -5181,7 +5219,10 @@ class ConsultationScaffold extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 subtitle,
-                style: const TextStyle(fontSize: 16, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: goMenMutedTextColor(context),
+                ),
               ),
               const SizedBox(height: 24),
               child,
@@ -5452,7 +5493,7 @@ class _ReplyOptionCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'コピー',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -5507,7 +5548,7 @@ class _SimpleReplyCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'コピー',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
