@@ -265,10 +265,13 @@ def build_context_block(
 
 def build_consult_prompt(request: ConsultSessionRequest) -> str:
     relation_guide = {
-        "couple": "恋人・パートナー間では、正しさよりも『大事にされている感覚』が重要。見捨てられ不安、温度差、言い方の冷たさに敏感。",
-        "friend": "友人間では、重すぎる文や詰問口調は負担になりやすい。一方で雑に扱われた感じにも敏感。",
-        "parent_child": "親子間では、説教・支配・恩着せがましさとして聞こえないことが重要。上下感より尊重を優先。",
+        "couple": "恋人・パートナー間では、正しさよりも『大事にされている感覚』が重要。冷たさ、温度差、見捨てられ感、優先順位の低さとして聞こえないことを重視する。",
+        "friend": "友人間では、重すぎる文、詰問、圧のある追撃は負担になりやすい。一方で、雑に扱われた感じや距離の取り方にも敏感。",
+        "family": "家族間では、説教・支配・恩着せがましさ・上下感として聞こえないことが重要。近い関係だからこそ、雑さや決めつけが刺さりやすい。",
+        "parent_child": "親子間では、説教・支配・恩着せがましさ・上下感として聞こえないことが重要。近い関係だからこそ、雑さや決めつけが刺さりやすい。",
     }.get(request.relation_type, "関係性に応じて、相手の尊重と悪化回避を優先する。")
+
+    relation_detail_text = "、".join(request.relation_detail_labels) if request.relation_detail_labels else "特になし"
 
     theme_guide_map = {
         "連絡頻度": "『内容』よりも『大事にされていない感じ』『追われている感じ』が火種になりやすい。長文の追撃は悪化しやすい。",
@@ -326,6 +329,12 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
     }
     goal_guide = goal_guide_map.get(request.goal, "goal を反映した提案にする。")
 
+    screenshot_note = (
+        f"スクリーンショット: {len(request.screenshots_base64)}枚。読める範囲の具体語だけ使ってよい。読めない部分は絶対に補完しない。"
+        if request.screenshots_base64
+        else "スクリーンショット: なし。"
+    )
+
     context_block = build_context_block(
         note=request.note,
         profile_context=request.profile_context,
@@ -346,6 +355,8 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
 4. 今送るべきかを判定する
 5. 他の2案は補助案として方向性を少し変える
 6. 相手プロフィールや過去の相談傾向があれば、必ず反映する
+7. relation_detail_labels があるなら、必ず関係性の温度感に反映する
+8. スクリーンショットがあるなら、読める範囲の具体的要素を反映する
 
 以下を必ず守ってください。
 - 必ず JSON オブジェクトのみを返す
@@ -364,7 +375,9 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
 - 感情が高い時は、説明より沈静化を優先する
 - 相手プロフィールに「傷つきやすい言い方」「避けたいワード」「通りやすい伝え方」があれば、それを返信候補に反映する
 - 過去相談の傾向があれば、同じ失敗を繰り返しにくい提案にする
-- 1個目の返信文では、theme_details / chat_text / 補足情報 のどれかを必ず1つ以上具体的に踏む
+- 1個目の返信文では、theme_details / chat_text / 補足情報 / relation_detail_labels / スクリーンショット のうち、少なくとも2要素を具体的に踏む
+- 読めるスクリーンショットがある場合、そこから拾える具体語を1つまで使ってよい
+- 読めない箇所は絶対に補完しない
 - 1個目の返信文は、実在の人が送る自然さを優先し、AIっぽい説明口調にしない
 - 1文目で、相手が嫌だった・しんどかったポイントを具体的に受け止める
 - 2文目までに、自分側のまずさを短く引き取る
@@ -372,8 +385,22 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
 - 「でも」「そんなつもりじゃない」「誤解だよ」「ちゃんと話したい」「わかってほしい」で締めるような一般化された文は禁止
 - send_timing_recommendation が wait 系でも、reply_options[0] には「今送るならここまで」の最小限で自然な文を必ず出す
 
+差別化ルール:
+- 3つの reply_options は、同じ文の言い換えにしない
+- reply_options[0] は「本命」
+- reply_options[1] は「もう少し率直」
+- reply_options[2] は「もう少しやわらかい」
+- 3案とも書き出しを変える
+- 毎回同じ定型句を使い回さない
+- 特に「言い方がきつくなっていたらごめん」「軽く扱いたいわけじゃない」「ちゃんと受け止めたい」は必要な時だけ使う
+- 入力に固有の具体語があるなら、1案目では必ず1つ以上入れる
+- ただし引用のしすぎや不自然なコピペ口調は避ける
+
 関係性ガイド:
 {relation_guide}
+
+関係性の詳細:
+{relation_detail_text}
 
 テーマガイド:
 {theme_guide}
@@ -390,10 +417,9 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
 返す JSON の shape:
 {{
   "session_id": "string",
-  "analysis_status": "completed",
   "safety_flag": false,
   "send_timing_recommendation": {{
-    "code": "send_now_or_wait_short_or_wait_long_or_soften_first",
+    "code": "send_now_or_soften_first_or_wait_a_bit",
     "label": "string",
     "reason": "string"
   }},
@@ -404,46 +430,23 @@ def build_consult_prompt(request: ConsultSessionRequest) -> str:
   "reply_options": [
     {{
       "type": "best_reply",
-      "title": "string",
+      "title": "まずこれがベスト",
       "body": "string"
     }},
     {{
       "type": "alternative_reply_1",
-      "title": "string",
+      "title": "もう少し率直に返すなら",
       "body": "string"
     }},
     {{
       "type": "alternative_reply_2",
-      "title": "string",
+      "title": "もう少しやわらかく返すなら",
       "body": "string"
     }}
   ],
   "next_actions": ["string", "string", "string"],
   "pre_send_cautions": ["string", "string", "string"]
 }}
-
-reply_options のルール:
-- 必ず3個
-- 1個目が一番おすすめ
-- 1個目の title は必ず「まずこれがベスト」にする
-- 2個目の title は必ず「その他には、こう返すなら」にする
-- 3個目の title は必ず「その他には、少し落ち着かせるなら」にする
-- 1個目の body が最も完成度の高い返信文であること
-- 2個目は少し率直、3個目は少し沈静化寄りにする
-- 3つとも文体や方向性を少しずつ変える
-- 「嫌な気持ちにさせてごめん」だけのような短すぎる文は禁止
-- 「ちゃんと話したい」だけのような一般化された締めは禁止
-- theme_details を必ず反映する
-- chat_text や今回の補足、相手プロフィール、過去傾向があるならそれも必ず反映する
-
-heard_as_interpretations のルール:
-- 相手が心の中でそう受け取るかもしれない言葉として、短く具体的に書く
-- 抽象語だけで終わらせず、「軽く扱われた」「責められている」「今は気持ちより自分の説明が優先なんだ」など、刺さる形で書く
-
-next_actions / pre_send_cautions のルール:
-- どちらも短く実務的に書く
-- next_actions は今から取る行動を具体的にする
-- pre_send_cautions は送信直前に注意すべきことを短く言う
 
 入力:
 relation_type: {request.relation_type}
@@ -454,17 +457,22 @@ current_status: {request.current_status}
 emotion_level: {request.emotion_level}
 goal: {request.goal}
 chat_text: {request.chat_text or ""}
+{screenshot_note}
 補足情報:
 {context_block}
 """.strip()
+
 
 
 def build_precheck_prompt(request: PrecheckRequest) -> str:
     relation_guide = {
         "couple": "恋人同士では、責任追及より『大事にされているか』が重要。冷たさ、見捨てられ感、温度差に敏感。",
         "friend": "友人同士では、重すぎる文、詰問口調、圧のある追撃は負担になりやすい。",
-        "parent_child": "親子では、説教・支配・恩着せがましさ・監視として聞こえないことが重要。",
+        "family": "家族では、説教・支配・決めつけ・上下感として聞こえないことが重要。近い関係ほど雑な言い方が刺さりやすい。",
+        "parent_child": "親子では、説教・支配・決めつけ・上下感として聞こえないことが重要。近い関係ほど雑な言い方が刺さりやすい。",
     }.get(request.relation_type, "関係性に応じて、圧迫感や責任追及の響きを避ける。")
+
+    relation_detail_text = "、".join(request.relation_detail_labels) if request.relation_detail_labels else "特になし"
 
     context_block = build_context_block(
         optional_context_text=request.optional_context_text,
@@ -486,6 +494,7 @@ def build_precheck_prompt(request: PrecheckRequest) -> str:
 3. そのほかの代案を2つ出す
 4. 相手にどう響くかを具体的に示す
 5. 相手プロフィールや過去相談傾向があれば、必ず反映する
+6. relation_detail_labels があるなら、文の温度感に反映する
 
 必ず守ること:
 - 必ず JSON オブジェクトのみを返す
@@ -506,9 +515,23 @@ def build_precheck_prompt(request: PrecheckRequest) -> str:
 - 相手プロフィールに「傷つきやすい言い方」「避けたいワード」「通りやすい伝え方」があれば、それを修正文に反映する
 - 過去相談の傾向があれば、同じ悪化パターンを避ける
 - 新しい論点を増やしすぎず、今ある文面を実戦向けに整える
+- relation_detail_labels と補足情報がある場合は、読み取れる範囲で具体性に使う
+- 毎回同じ定型句を使い回さない
+- 特に「言い方が強くなっていたらごめん」「ちゃんと伝わる形で話したい」は必要な時だけ使う
+
+差別化ルール:
+- softened_message は最もバランスの良い1案
+- revised_message_options[1] は「もう少し率直」
+- revised_message_options[2] は「もう少しやわらかい」
+- 3案とも書き出しを変える
+- 3案を単なる語尾違いにしない
+- draft_message に固有の論点があるなら、必ず1つ以上残す
 
 関係性ガイド:
 {relation_guide}
+
+関係性の詳細:
+{relation_detail_text}
 
 返す JSON の shape:
 {{
@@ -549,6 +572,7 @@ draft_message: {request.draft_message}
 """.strip()
 
 
+
 def build_consult_input(request: ConsultSessionRequest) -> List[dict[str, Any]]:
     content: List[dict[str, Any]] = [
         {
@@ -587,7 +611,9 @@ def create_consult_session(request: ConsultSessionRequest):
             instructions=(
                 "You are a careful relationship mediation assistant. "
                 "Output valid JSON only. "
-                "Prioritize concrete, copy-ready Japanese replies over generic advice."
+                "Prioritize concrete, copy-ready Japanese replies over generic advice. "
+                "Avoid repetitive template-like wording across different cases. "
+                "Use relation details, profile context, recent patterns, and readable screenshot cues when available."
             ),
             input=build_consult_input(request),
             text={"format": {"type": "json_object"}},
@@ -617,7 +643,9 @@ def precheck_message(request: PrecheckRequest):
                 "You are a careful message precheck assistant. "
                 "Output valid JSON only. "
                 "Prioritize one best softened message and two concrete alternatives. "
-                "Keep the best message concise, usable, and natural."
+                "Keep the best message concise, usable, and natural. "
+                "Avoid repetitive template-like wording across different cases. "
+                "Use relation details, profile context, and recent patterns when available."
             ),
             input=build_precheck_prompt(request),
             text={"format": {"type": "json_object"}},
