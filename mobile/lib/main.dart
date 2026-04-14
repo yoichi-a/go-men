@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+
 void main() {
   runApp(const GoMenApp());
 }
@@ -2644,40 +2645,16 @@ class SettingsHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('設定・ポリシー'),
+        title: const Text('設定'),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
-                    Text(
-                      'リリース準備中',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Go-men は、関係を悪化させにくい返信づくりを支援するアプリです。現在はMVP段階のため、無料版の上限や法務表示を先に整えています。',
-                      style: TextStyle(fontSize: 16, height: 1.55),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
             _SettingsNavCard(
               icon: Icons.privacy_tip_outlined,
               title: 'プライバシーポリシー',
-              subtitle: '入力内容の保存とAI送信について',
+              subtitle: 'アプリ内で確認する',
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -2689,8 +2666,8 @@ class SettingsHubScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _SettingsNavCard(
               icon: Icons.description_outlined,
-              title: '利用規約・免責',
-              subtitle: '使い方のルールと注意事項',
+              title: '利用規約',
+              subtitle: '免責事項を含む',
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -2716,7 +2693,7 @@ class SettingsHubScreen extends StatelessWidget {
             _SettingsNavCard(
               icon: Icons.mail_outline,
               title: 'お問い合わせ',
-              subtitle: 'リリース時の連絡先案内',
+              subtitle: '連絡先を確認する',
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -2736,6 +2713,7 @@ class SettingsHubScreen extends StatelessWidget {
                       '現在の無料版',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
+                        fontSize: 18,
                       ),
                     ),
                     SizedBox(height: 10),
@@ -2806,19 +2784,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
               'AIによる分析を行うため、入力内容の一部がサーバー経由で外部AIサービスに送信される場合があります。個人情報や極めて機微な情報は、必要最小限にとどめてください。',
         ),
         _LegalSection(
-          title: '4. 端末内保存',
+          title: '4. 保存について',
           body:
-              'プロフィール情報や保存結果は、MVP版では主に端末内のローカル保存を利用しています。端末の共有や紛失にはご注意ください。',
+              '保存機能をオンにした場合、相談結果や送信前チェック結果は端末内または提供環境内に保持されることがあります。共有端末では取り扱いに注意してください。',
         ),
         _LegalSection(
-          title: '5. スクリーンショット等',
+          title: '5. お問い合わせ',
           body:
-              '将来的にスクリーンショットや画像入力を扱う場合、相手の氏名、連絡先、会話内容などが含まれることがあります。必要に応じて加工やマスキングを行ってください。',
-        ),
-        _LegalSection(
-          title: '6. 改定',
-          body:
-              '本ポリシーは、機能追加や法令対応に応じて更新されることがあります。',
+              '本ポリシーに関するお問い合わせは、設定内のお問い合わせ先をご確認ください。',
         ),
       ],
     );
@@ -2831,32 +2804,32 @@ class TermsAndDisclaimerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _LegalScaffold(
-      title: '利用規約・免責',
+      title: '利用規約',
       children: const [
         _LegalSection(
-          title: '1. 本サービスの性質',
+          title: '1. 本サービスについて',
           body:
-              'Go-men は、対人コミュニケーションの整理や文章作成を補助するためのツールです。専門家による法律・医療・精神医療・カウンセリング等の助言を代替するものではありません。',
+              'Go-men は、コミュニケーションの整理や返信候補の提案を補助するアプリです。診断、医療、法律、緊急対応などを目的としたものではありません。',
         ),
         _LegalSection(
-          title: '2. 禁止事項',
+          title: '2. 保証について',
           body:
-              '違法行為、嫌がらせ、脅迫、差別、ストーカー行為、個人情報の不適切な共有、その他第三者を害する目的での利用を禁止します。',
+              '本サービスは、返信内容の正確性、完全性、相手との関係改善、トラブル回避を保証するものではありません。最終判断はユーザー自身の責任で行ってください。',
         ),
         _LegalSection(
-          title: '3. 自己責任',
+          title: '3. 禁止事項',
           body:
-              '返信文や提案の採用・送信はユーザー自身の判断と責任で行ってください。送信結果や人間関係の変化について、運営は結果を保証しません。',
+              '違法行為、嫌がらせ、脅迫、なりすまし、第三者の権利侵害、公序良俗に反する目的での利用を禁止します。',
         ),
         _LegalSection(
-          title: '4. 緊急時の非対応',
+          title: '4. 免責',
           body:
-              '自傷他害、DV、脅迫、ストーカー、犯罪被害など緊急性の高い状況では、本サービスではなく警察・医療機関・専門窓口等の公的支援をご利用ください。',
+              '本サービスの利用により生じた直接的または間接的な損害について、運営者は責任を負いません。',
         ),
         _LegalSection(
-          title: '5. サービス変更',
+          title: '5. 変更',
           body:
-              '機能、料金、保存上限、提供内容は予告なく変更されることがあります。',
+              '本規約は、必要に応じて予告なく変更されることがあります。最新版はアプリ内表示を優先します。',
         ),
       ],
     );
@@ -2884,7 +2857,10 @@ class ProPlanScreen extends StatelessWidget {
                   children: const [
                     Text(
                       '無料版',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     SizedBox(height: 12),
                     Text('・相談モード'),
@@ -2907,7 +2883,10 @@ class ProPlanScreen extends StatelessWidget {
                   children: const [
                     Text(
                       'Pro 予定機能',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     SizedBox(height: 12),
                     Text('・複数プロフィール'),
@@ -2945,7 +2924,7 @@ class ContactScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const contactEmail = 'support@gomen.app（公開前の仮表記）';
+    const contactEmail = 'gomen.mendly@gmail.com';
 
     return Scaffold(
       appBar: AppBar(
@@ -2991,7 +2970,7 @@ class ContactScreen extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  '公開時には、実際に受信できるサポートメールアドレスへ差し替えてください。App Store / Google Play の審査では、ユーザーが確認できるサポート窓口があると安心です。',
+                  'お問い合わせが必要な場合は、上記メールアドレスまでご連絡ください。',
                   style: TextStyle(height: 1.55),
                 ),
               ),
@@ -3048,12 +3027,18 @@ class _LegalSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               body,
-              style: const TextStyle(height: 1.6),
+              style: const TextStyle(
+                height: 1.6,
+                fontSize: 15,
+              ),
             ),
           ],
         ),
