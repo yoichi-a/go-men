@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 void main() {
   runApp(const GoMenApp());
 }
@@ -17,9 +16,7 @@ Future<void> copyText(
 }) async {
   await Clipboard.setData(ClipboardData(text: text));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(label)),
-  );
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
 }
 
 String formatDateTime(String isoString) {
@@ -121,28 +118,20 @@ class GoMenApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF6F8FB),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-        ),
+        cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
       ),
       builder: (context, child) {
-        return _AppViewport(
-          child: child ?? const SizedBox.shrink(),
-        );
+        return _AppViewport(child: child ?? const SizedBox.shrink());
       },
       home: const HomeScreen(),
     );
   }
-
 }
 
 const double kAppMaxWidth = 460;
 
 class _AppViewport extends StatelessWidget {
-  const _AppViewport({
-    required this.child,
-  });
+  const _AppViewport({required this.child});
 
   final Widget child;
 
@@ -157,9 +146,7 @@ class _AppViewport extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kAppMaxWidth),
             child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF6F8FB),
-              ),
+              decoration: const BoxDecoration(color: Color(0xFFF6F8FB)),
               child: child,
             ),
           ),
@@ -217,7 +204,8 @@ class RelationshipProfile {
 よく揉めるテーマ: ${commonConflicts.isEmpty ? '未設定' : commonConflicts}
 避けたいワード: ${avoidWords.isEmpty ? '未設定' : avoidWords}
 補足メモ: ${notes.isEmpty ? '未設定' : notes}
-'''.trim();
+'''
+        .trim();
   }
 
   Map<String, dynamic> toMap() {
@@ -385,8 +373,8 @@ class ConsultationResult {
           )
           .toList(),
       nextActions: (data['next_actions'] as List<dynamic>).cast<String>(),
-      preSendCautions:
-          (data['pre_send_cautions'] as List<dynamic>).cast<String>(),
+      preSendCautions: (data['pre_send_cautions'] as List<dynamic>)
+          .cast<String>(),
     );
   }
 }
@@ -417,8 +405,8 @@ class PrecheckResult {
       reason: safeToSend['reason'] as String,
       riskPoints: (data['risk_points'] as List<dynamic>).cast<String>(),
       softenedMessage: data['softened_message'] as String,
-      revisedMessageOptions:
-          (data['revised_message_options'] as List<dynamic>).cast<String>(),
+      revisedMessageOptions: (data['revised_message_options'] as List<dynamic>)
+          .cast<String>(),
       suggestConsultMode: data['suggest_consult_mode'] as bool,
     );
   }
@@ -563,7 +551,9 @@ class LocalHistoryStorage {
     await prefs.remove(_key);
   }
 
-  static Future<List<SavedResultItem>> loadItemsForProfile(String profileId) async {
+  static Future<List<SavedResultItem>> loadItemsForProfile(
+    String profileId,
+  ) async {
     final all = await loadItems();
     return all.where((item) => item.profileId == profileId).toList();
   }
@@ -575,32 +565,29 @@ class LocalHistoryStorage {
     }
 
     final recent = items.take(3).toList();
-    final lines = recent.map((item) {
-      return '・${item.title} / ${item.subtitle}';
-    }).join('\n');
+    final lines = recent
+        .map((item) {
+          return '・${item.title} / ${item.subtitle}';
+        })
+        .join('\n');
 
     return '''
 この相手との過去の相談傾向:
 $lines
-'''.trim();
+'''
+        .trim();
   }
 }
 
 class ThemeQuestion {
-  const ThemeQuestion({
-    required this.title,
-    required this.options,
-  });
+  const ThemeQuestion({required this.title, required this.options});
 
   final String title;
   final List<String> options;
 }
 
 class ReplyOption {
-  const ReplyOption({
-    required this.title,
-    required this.body,
-  });
+  const ReplyOption({required this.title, required this.body});
 
   final String title;
   final String body;
@@ -687,10 +674,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: '避けたいワード',
                     value: profile.avoidWords,
                   ),
-                  _ProfileDetailItem(
-                    label: '補足メモ',
-                    value: profile.notes,
-                  ),
+                  _ProfileDetailItem(label: '補足メモ', value: profile.notes),
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: () {
@@ -698,7 +682,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.of(this.context)
                           .push(
                             MaterialPageRoute(
-                              builder: (_) => ProfileEditScreen(profile: profile),
+                              builder: (_) =>
+                                  ProfileEditScreen(profile: profile),
                             ),
                           )
                           .then((_) => _reloadDashboard());
@@ -725,7 +710,8 @@ class _HomeScreenState extends State<HomeScreen> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final data = snapshot.data ??
+            final data =
+                snapshot.data ??
                 const HomeDashboardData(
                   profile: null,
                   profileItems: [],
@@ -878,8 +864,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                           MaterialPageRoute(
                                             builder: (_) =>
                                                 const SavedResultsScreen(
-                                              initialOnlyCurrentProfile: true,
-                                            ),
+                                                  initialOnlyCurrentProfile:
+                                                      true,
+                                                ),
                                           ),
                                         )
                                         .then((_) => _reloadDashboard());
@@ -911,10 +898,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 10),
                           Text(
                             buildTrendHeadline(profileItems),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              height: 1.5,
-                            ),
+                            style: const TextStyle(fontSize: 16, height: 1.5),
                           ),
                           if (profileItems.isNotEmpty) ...[
                             const SizedBox(height: 12),
@@ -971,9 +955,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.of(context)
                         .push(
                           MaterialPageRoute(
-                            builder: (_) => PrecheckInputScreen(
-                              initialProfile: profile,
-                            ),
+                            builder: (_) =>
+                                PrecheckInputScreen(initialProfile: profile),
                           ),
                         )
                         .then((_) => _reloadDashboard());
@@ -982,9 +965,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                   child: Text(
-                    profile != null
-                        ? '送る前にチェックする（プロフィール適用）'
-                        : '送る前にチェックする',
+                    profile != null ? '送る前にチェックする（プロフィール適用）' : '送る前にチェックする',
                     style: const TextStyle(fontSize: 18),
                   ),
                 ),
@@ -1048,10 +1029,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _ProfileDetailItem extends StatelessWidget {
-  const _ProfileDetailItem({
-    required this.label,
-    required this.value,
-  });
+  const _ProfileDetailItem({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1073,10 +1051,7 @@ class _ProfileDetailItem extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            displayValue,
-            style: const TextStyle(fontSize: 16, height: 1.5),
-          ),
+          Text(displayValue, style: const TextStyle(fontSize: 16, height: 1.5)),
         ],
       ),
     );
@@ -1084,10 +1059,7 @@ class _ProfileDetailItem extends StatelessWidget {
 }
 
 class ProfileEditScreen extends StatefulWidget {
-  const ProfileEditScreen({
-    super.key,
-    this.profile,
-  });
+  const ProfileEditScreen({super.key, this.profile});
 
   final RelationshipProfile? profile;
 
@@ -1109,18 +1081,24 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController =
-        TextEditingController(text: widget.profile?.displayName ?? '');
-    _sensitiveToController =
-        TextEditingController(text: widget.profile?.sensitiveTo ?? '');
-    _worksWellWithController =
-        TextEditingController(text: widget.profile?.worksWellWith ?? '');
-    _distanceController =
-        TextEditingController(text: widget.profile?.distancePreference ?? '');
-    _commonConflictsController =
-        TextEditingController(text: widget.profile?.commonConflicts ?? '');
-    _avoidWordsController =
-        TextEditingController(text: widget.profile?.avoidWords ?? '');
+    _nameController = TextEditingController(
+      text: widget.profile?.displayName ?? '',
+    );
+    _sensitiveToController = TextEditingController(
+      text: widget.profile?.sensitiveTo ?? '',
+    );
+    _worksWellWithController = TextEditingController(
+      text: widget.profile?.worksWellWith ?? '',
+    );
+    _distanceController = TextEditingController(
+      text: widget.profile?.distancePreference ?? '',
+    );
+    _commonConflictsController = TextEditingController(
+      text: widget.profile?.commonConflicts ?? '',
+    );
+    _avoidWordsController = TextEditingController(
+      text: widget.profile?.avoidWords ?? '',
+    );
     _notesController = TextEditingController(text: widget.profile?.notes ?? '');
     _relationType = widget.profile?.relationType;
   }
@@ -1139,21 +1117,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   void _save() async {
     if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('相手の名前や呼び名を入れてください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('相手の名前や呼び名を入れてください')));
       return;
     }
 
     if (_relationType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('関係性を選んでください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('関係性を選んでください')));
       return;
     }
 
     final profile = RelationshipProfile(
-      id: widget.profile?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      id:
+          widget.profile?.id ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
       displayName: _nameController.text.trim(),
       relationType: _relationType!,
       sensitiveTo: _sensitiveToController.text.trim(),
@@ -1356,7 +1336,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 class RelationTypeScreen extends StatelessWidget {
   const RelationTypeScreen({super.key});
 
-  void _selectRelation(BuildContext context, String relationType, String label) {
+  void _selectRelation(
+    BuildContext context,
+    String relationType,
+    String label,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ThemeSelectionScreen(
@@ -1379,8 +1363,7 @@ class RelationTypeScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ElevatedButton(
-            onPressed: () =>
-                _selectRelation(context, 'couple', '恋人・パートナー'),
+            onPressed: () => _selectRelation(context, 'couple', '恋人・パートナー'),
             style: elevatedChoiceStyle,
             child: const Text('恋人・パートナー', style: choiceTextStyle),
           ),
@@ -1403,10 +1386,7 @@ class RelationTypeScreen extends StatelessWidget {
 }
 
 class ThemeSelectionScreen extends StatelessWidget {
-  const ThemeSelectionScreen({
-    super.key,
-    required this.draft,
-  });
+  const ThemeSelectionScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
@@ -1455,9 +1435,7 @@ class ThemeSelectionScreen extends StatelessWidget {
   void _selectTheme(BuildContext context, String theme) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ThemeDetailScreen(
-          draft: draft.copyWith(theme: theme),
-        ),
+        builder: (_) => ThemeDetailScreen(draft: draft.copyWith(theme: theme)),
       ),
     );
   }
@@ -1492,10 +1470,7 @@ class ThemeSelectionScreen extends StatelessWidget {
 }
 
 class ThemeDetailScreen extends StatefulWidget {
-  const ThemeDetailScreen({
-    super.key,
-    required this.draft,
-  });
+  const ThemeDetailScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
@@ -1508,9 +1483,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   final List<String> answers = [];
 
   List<ThemeQuestion> get questions => _buildQuestions(
-        relationType: widget.draft.relationType ?? 'couple',
-        theme: widget.draft.theme ?? 'その他',
-      );
+    relationType: widget.draft.relationType ?? 'couple',
+    theme: widget.draft.theme ?? 'その他',
+  );
 
   void _selectAnswer(String answer) {
     answers.add(answer);
@@ -1561,19 +1536,15 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
 }
 
 class CurrentStatusScreen extends StatelessWidget {
-  const CurrentStatusScreen({
-    super.key,
-    required this.draft,
-  });
+  const CurrentStatusScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
   void _selectStatus(BuildContext context, String status) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EmotionLevelScreen(
-          draft: draft.copyWith(currentStatus: status),
-        ),
+        builder: (_) =>
+            EmotionLevelScreen(draft: draft.copyWith(currentStatus: status)),
       ),
     );
   }
@@ -1615,31 +1586,22 @@ class CurrentStatusScreen extends StatelessWidget {
 }
 
 class EmotionLevelScreen extends StatelessWidget {
-  const EmotionLevelScreen({
-    super.key,
-    required this.draft,
-  });
+  const EmotionLevelScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
   void _selectEmotion(BuildContext context, String emotionLevel) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GoalScreen(
-          draft: draft.copyWith(emotionLevel: emotionLevel),
-        ),
+        builder: (_) =>
+            GoalScreen(draft: draft.copyWith(emotionLevel: emotionLevel)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    const emotionLevels = [
-      '落ち着いている',
-      '少ししんどい',
-      'かなり感情的',
-      '今送ると悪化しそう',
-    ];
+    const emotionLevels = ['落ち着いている', '少ししんどい', 'かなり感情的', '今送ると悪化しそう'];
 
     return ConsultationScaffold(
       currentStep: 5,
@@ -1665,19 +1627,14 @@ class EmotionLevelScreen extends StatelessWidget {
 }
 
 class GoalScreen extends StatelessWidget {
-  const GoalScreen({
-    super.key,
-    required this.draft,
-  });
+  const GoalScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
   void _selectGoal(BuildContext context, String goal) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EvidenceInputScreen(
-          draft: draft.copyWith(goal: goal),
-        ),
+        builder: (_) => EvidenceInputScreen(draft: draft.copyWith(goal: goal)),
       ),
     );
   }
@@ -1717,10 +1674,7 @@ class GoalScreen extends StatelessWidget {
 }
 
 class EvidenceInputScreen extends StatefulWidget {
-  const EvidenceInputScreen({
-    super.key,
-    required this.draft,
-  });
+  const EvidenceInputScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
@@ -1747,10 +1701,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
 
   void _addDummyScreenshot() {
     setState(() {
-      _screenshots = [
-        ..._screenshots,
-        'スクショ ${_screenshots.length + 1}',
-      ];
+      _screenshots = [..._screenshots, 'スクショ ${_screenshots.length + 1}'];
     });
   }
 
@@ -1860,10 +1811,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 18),
                 ),
-                child: const Text(
-                  'やり取りなしで進む',
-                  style: TextStyle(fontSize: 18),
-                ),
+                child: const Text('やり取りなしで進む', style: TextStyle(fontSize: 18)),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -1885,10 +1833,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
 }
 
 class NoteScreen extends StatefulWidget {
-  const NoteScreen({
-    super.key,
-    required this.draft,
-  });
+  const NoteScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
@@ -1962,10 +1907,7 @@ class _NoteScreenState extends State<NoteScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                'この内容で相談する',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: const Text('この内容で相談する', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -1975,10 +1917,7 @@ class _NoteScreenState extends State<NoteScreen> {
 }
 
 class AnalyzeScreen extends StatefulWidget {
-  const AnalyzeScreen({
-    super.key,
-    required this.draft,
-  });
+  const AnalyzeScreen({super.key, required this.draft});
 
   final ConsultationDraft draft;
 
@@ -2031,8 +1970,9 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
       final result = ConsultationResult.fromJson(decoded);
 
-      final bestText =
-          result.replyOptions.isNotEmpty ? result.replyOptions.first.body : '';
+      final bestText = result.replyOptions.isNotEmpty
+          ? result.replyOptions.first.body
+          : '';
 
       await LocalHistoryStorage.saveItem(
         SavedResultItem(
@@ -2051,10 +1991,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ResultScreen(
-            draft: widget.draft,
-            result: result,
-          ),
+          builder: (_) => ResultScreen(draft: widget.draft, result: result),
         ),
       );
     } catch (e) {
@@ -2076,19 +2013,13 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
 
     return const LoadingScreen(
       title: 'Go-men が整理しています',
-      lines: [
-        '相手の受け取り方と、今の動き方を整理しています',
-        '悪化しにくい返し方を考えています',
-      ],
+      lines: ['相手の受け取り方と、今の動き方を整理しています', '悪化しにくい返し方を考えています'],
     );
   }
 }
 
 class PrecheckInputScreen extends StatefulWidget {
-  const PrecheckInputScreen({
-    super.key,
-    this.initialProfile,
-  });
+  const PrecheckInputScreen({super.key, this.initialProfile});
 
   final RelationshipProfile? initialProfile;
 
@@ -2130,16 +2061,16 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     final contextText = _contextController.text.trim();
 
     if (_relationType == null || _relationLabel == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('相手との関係を選んでください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('相手との関係を選んでください')));
       return;
     }
 
     if (draftMessage.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('チェックしたい文を入力してください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('チェックしたい文を入力してください')));
       return;
     }
 
@@ -2152,9 +2083,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     );
 
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PrecheckAnalyzeScreen(draft: draft),
-      ),
+      MaterialPageRoute(builder: (_) => PrecheckAnalyzeScreen(draft: draft)),
     );
   }
 
@@ -2189,9 +2118,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
     final profile = widget.initialProfile;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('送る前にチェックする'),
-      ),
+      appBar: AppBar(title: const Text('送る前にチェックする')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -2248,8 +2175,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               maxLines: 8,
               decoration: const InputDecoration(
                 labelText: '下書き',
-                hintText:
-                    '例\nなんで昨日返事くれなかったの？こっちはずっと待ってたんだけど。',
+                hintText: '例\nなんで昨日返事くれなかったの？こっちはずっと待ってたんだけど。',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
@@ -2265,8 +2191,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                 labelText: '補足',
-                hintText:
-                    '例\n責めたいわけではないけど、不安で強い言い方になってしまった。',
+                hintText: '例\n責めたいわけではないけど、不安で強い言い方になってしまった。',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
@@ -2282,10 +2207,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                'この文をチェックする',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: const Text('この文をチェックする', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
           ],
@@ -2296,10 +2218,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
 }
 
 class PrecheckAnalyzeScreen extends StatefulWidget {
-  const PrecheckAnalyzeScreen({
-    super.key,
-    required this.draft,
-  });
+  const PrecheckAnalyzeScreen({super.key, required this.draft});
 
   final PrecheckDraft draft;
 
@@ -2364,10 +2283,8 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => PrecheckResultScreen(
-            draft: widget.draft,
-            result: result,
-          ),
+          builder: (_) =>
+              PrecheckResultScreen(draft: widget.draft, result: result),
         ),
       );
     } catch (e) {
@@ -2389,36 +2306,28 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
 
     return const LoadingScreen(
       title: '送る前に整えています',
-      lines: [
-        '相手にどう聞こえるかを見ています',
-        '今送ってよいかと、ベストな修正文を考えています',
-      ],
+      lines: ['相手にどう聞こえるかを見ています', '今送ってよいかと、ベストな修正文を考えています'],
     );
   }
 }
 
 class ResultScreen extends StatelessWidget {
-  const ResultScreen({
-    super.key,
-    required this.draft,
-    required this.result,
-  });
+  const ResultScreen({super.key, required this.draft, required this.result});
 
   final ConsultationDraft draft;
   final ConsultationResult result;
 
   @override
   Widget build(BuildContext context) {
-    final bestReply =
-        result.replyOptions.isNotEmpty ? result.replyOptions.first : null;
+    final bestReply = result.replyOptions.isNotEmpty
+        ? result.replyOptions.first
+        : null;
     final otherReplies = result.replyOptions.length > 1
         ? result.replyOptions.sublist(1)
         : <ReplyOption>[];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('相談結果'),
-      ),
+      appBar: AppBar(title: const Text('相談結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -2447,9 +2356,7 @@ class ResultScreen extends StatelessWidget {
                 title: 'その他には',
                 child: Column(
                   children: otherReplies
-                      .map(
-                        (option) => _ReplyOptionCard(option: option),
-                      )
+                      .map((option) => _ReplyOptionCard(option: option))
                       .toList(),
                 ),
               ),
@@ -2499,10 +2406,7 @@ class ResultScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                '自分の文をチェックする',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: const Text('自分の文をチェックする', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -2541,9 +2445,7 @@ class PrecheckResultScreen extends StatelessWidget {
         : <String>[];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('送信前チェック結果'),
-      ),
+      appBar: AppBar(title: const Text('送信前チェック結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -2571,9 +2473,7 @@ class PrecheckResultScreen extends StatelessWidget {
                 title: 'その他には',
                 child: Column(
                   children: alternatives
-                      .map(
-                        (text) => _SimpleReplyCard(text: text),
-                      )
+                      .map((text) => _SimpleReplyCard(text: text))
                       .toList(),
                 ),
               ),
@@ -2609,10 +2509,7 @@ class PrecheckResultScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                '相談モードでも見る',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: const Text('相談モードでも見る', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -2625,10 +2522,7 @@ class PrecheckResultScreen extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child: const Text(
-                'ホームに戻る',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: const Text('ホームに戻る', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -2637,16 +2531,13 @@ class PrecheckResultScreen extends StatelessWidget {
   }
 }
 
-
 class SettingsHubScreen extends StatelessWidget {
   const SettingsHubScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('設定'),
-      ),
+      appBar: AppBar(title: const Text('設定')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -2683,9 +2574,7 @@ class SettingsHubScreen extends StatelessWidget {
               subtitle: '無料版 / 有料版の違い',
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProPlanScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const ProPlanScreen()),
                 );
               },
             ),
@@ -2696,9 +2585,7 @@ class SettingsHubScreen extends StatelessWidget {
               subtitle: '連絡先を確認する',
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ContactScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const ContactScreen()),
                 );
               },
             ),
@@ -2775,8 +2662,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         ),
         _LegalSection(
           title: '2. 利用目的',
-          body:
-              '取得した情報は、返信候補の生成、送信前チェック、プロフィールに応じた提案、履歴表示などの機能提供のために使用します。',
+          body: '取得した情報は、返信候補の生成、送信前チェック、プロフィールに応じた提案、履歴表示などの機能提供のために使用します。',
         ),
         _LegalSection(
           title: '3. 外部サービスへの送信',
@@ -2790,8 +2676,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         ),
         _LegalSection(
           title: '5. お問い合わせ',
-          body:
-              '本ポリシーに関するお問い合わせは、設定内のお問い合わせ先をご確認ください。',
+          body: '本ポリシーに関するお問い合わせは、設定内のお問い合わせ先をご確認ください。',
         ),
       ],
     );
@@ -2818,18 +2703,15 @@ class TermsAndDisclaimerScreen extends StatelessWidget {
         ),
         _LegalSection(
           title: '3. 禁止事項',
-          body:
-              '違法行為、嫌がらせ、脅迫、なりすまし、第三者の権利侵害、公序良俗に反する目的での利用を禁止します。',
+          body: '違法行為、嫌がらせ、脅迫、なりすまし、第三者の権利侵害、公序良俗に反する目的での利用を禁止します。',
         ),
         _LegalSection(
           title: '4. 免責',
-          body:
-              '本サービスの利用により生じた直接的または間接的な損害について、運営者は責任を負いません。',
+          body: '本サービスの利用により生じた直接的または間接的な損害について、運営者は責任を負いません。',
         ),
         _LegalSection(
           title: '5. 変更',
-          body:
-              '本規約は、必要に応じて予告なく変更されることがあります。最新版はアプリ内表示を優先します。',
+          body: '本規約は、必要に応じて予告なく変更されることがあります。最新版はアプリ内表示を優先します。',
         ),
       ],
     );
@@ -2842,9 +2724,7 @@ class ProPlanScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Go-men Pro'),
-      ),
+      appBar: AppBar(title: const Text('Go-men Pro')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -2927,9 +2807,7 @@ class ContactScreen extends StatelessWidget {
     const contactEmail = 'gomen.mendly@gmail.com';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('お問い合わせ'),
-      ),
+      appBar: AppBar(title: const Text('お問い合わせ')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -2948,17 +2826,11 @@ class ContactScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      contactEmail,
-                      style: TextStyle(fontSize: 16),
-                    ),
+                    const Text(contactEmail, style: TextStyle(fontSize: 16)),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: () => copyText(
-                        context,
-                        contactEmail,
-                        label: '連絡先をコピーしました',
-                      ),
+                      onPressed: () =>
+                          copyText(context, contactEmail, label: '連絡先をコピーしました'),
                       child: const Text('連絡先をコピー'),
                     ),
                   ],
@@ -2983,10 +2855,7 @@ class ContactScreen extends StatelessWidget {
 }
 
 class _LegalScaffold extends StatelessWidget {
-  const _LegalScaffold({
-    required this.title,
-    required this.children,
-  });
+  const _LegalScaffold({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
@@ -2994,24 +2863,16 @@ class _LegalScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: children,
-        ),
+        child: ListView(padding: const EdgeInsets.all(20), children: children),
       ),
     );
   }
 }
 
 class _LegalSection extends StatelessWidget {
-  const _LegalSection({
-    required this.title,
-    required this.body,
-  });
+  const _LegalSection({required this.title, required this.body});
 
   final String title;
   final String body;
@@ -3027,19 +2888,10 @@ class _LegalSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
-            Text(
-              body,
-              style: const TextStyle(
-                height: 1.6,
-                fontSize: 15,
-              ),
-            ),
+            Text(body, style: const TextStyle(height: 1.6, fontSize: 15)),
           ],
         ),
       ),
@@ -3048,10 +2900,7 @@ class _LegalSection extends StatelessWidget {
 }
 
 class SavedResultsScreen extends StatefulWidget {
-  const SavedResultsScreen({
-    super.key,
-    this.initialOnlyCurrentProfile = false,
-  });
+  const SavedResultsScreen({super.key, this.initialOnlyCurrentProfile = false});
 
   final bool initialOnlyCurrentProfile;
 
@@ -3074,10 +2923,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
   Future<SavedResultsViewData> _loadViewData() async {
     final profile = await ProfileStorage.loadProfile();
     final items = await LocalHistoryStorage.loadItems();
-    return SavedResultsViewData(
-      activeProfile: profile,
-      items: items,
-    );
+    return SavedResultsViewData(activeProfile: profile, items: items);
   }
 
   void _reload() {
@@ -3110,10 +2956,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
     return result;
   }
 
-  Widget _filterChip({
-    required String value,
-    required String label,
-  }) {
+  Widget _filterChip({required String value, required String label}) {
     final selected = _typeFilter == value;
     return ChoiceChip(
       label: Text(label),
@@ -3151,7 +2994,8 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
             final profile = data.activeProfile;
             final allItems = data.items;
             final filteredItems = _applyFilters(allItems, profile);
-            final usageProgress = allItems.length / LocalHistoryStorage.maxItems;
+            final usageProgress =
+                allItems.length / LocalHistoryStorage.maxItems;
 
             return Column(
               children: [
@@ -3165,9 +3009,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                         children: [
                           Text(
                             '保存 ${allItems.length} / ${LocalHistoryStorage.maxItems}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
                           LinearProgressIndicator(
@@ -3179,11 +3021,15 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                             '無料版では直近5件まで保存されます。',
                             style: TextStyle(color: Colors.black54),
                           ),
-                          if (allItems.length >= LocalHistoryStorage.maxItems) ...[
+                          if (allItems.length >=
+                              LocalHistoryStorage.maxItems) ...[
                             const SizedBox(height: 8),
                             const Text(
                               '次の保存で古い結果から入れ替わります。',
-                              style: TextStyle(fontSize: 13, color: Colors.black54),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.black54,
+                              ),
                             ),
                           ],
                           const SizedBox(height: 12),
@@ -3235,17 +3081,20 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                       : ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: filteredItems.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final item = filteredItems[index];
-                            final typeLabel =
-                                item.type == 'precheck' ? '送信前チェック' : '相談';
+                            final typeLabel = item.type == 'precheck'
+                                ? '送信前チェック'
+                                : '相談';
 
                             return Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
                                     Text(
                                       typeLabel,
@@ -3264,7 +3113,9 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                       ),
                                     ),
                                     if (item.profileName != null &&
-                                        item.profileName!.trim().isNotEmpty) ...[
+                                        item.profileName!
+                                            .trim()
+                                            .isNotEmpty) ...[
                                       const SizedBox(height: 6),
                                       Text(
                                         '相手: ${item.profileName}',
@@ -3276,7 +3127,9 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                     const SizedBox(height: 6),
                                     Text(
                                       item.subtitle,
-                                      style: const TextStyle(color: Colors.black54),
+                                      style: const TextStyle(
+                                        color: Colors.black54,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
@@ -3304,8 +3157,8 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                                     MaterialPageRoute(
                                                       builder: (_) =>
                                                           SavedResultDetailScreen(
-                                                        item: item,
-                                                      ),
+                                                            item: item,
+                                                          ),
                                                     ),
                                                   )
                                                   .then((_) => _reload());
@@ -3316,8 +3169,10 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: ElevatedButton(
-                                            onPressed: () =>
-                                                copyText(context, item.bestText),
+                                            onPressed: () => copyText(
+                                              context,
+                                              item.bestText,
+                                            ),
                                             child: const Text('コピー'),
                                           ),
                                         ),
@@ -3340,10 +3195,7 @@ class _SavedResultsScreenState extends State<SavedResultsScreen> {
 }
 
 class SavedResultDetailScreen extends StatelessWidget {
-  const SavedResultDetailScreen({
-    super.key,
-    required this.item,
-  });
+  const SavedResultDetailScreen({super.key, required this.item});
 
   final SavedResultItem item;
 
@@ -3352,9 +3204,7 @@ class SavedResultDetailScreen extends StatelessWidget {
     final typeLabel = item.type == 'precheck' ? '送信前チェック' : '相談';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('保存した結果'),
-      ),
+      appBar: AppBar(title: const Text('保存した結果')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -3404,11 +3254,7 @@ class SavedResultDetailScreen extends StatelessWidget {
 }
 
 class LoadingScreen extends StatelessWidget {
-  const LoadingScreen({
-    super.key,
-    required this.title,
-    required this.lines,
-  });
+  const LoadingScreen({super.key, required this.title, required this.lines});
 
   final String title;
   final List<String> lines;
@@ -3514,9 +3360,7 @@ class ConsultationScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('相談する'),
-      ),
+      appBar: AppBar(title: const Text('相談する')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -3579,36 +3423,50 @@ class _DecisionSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 18),
+      elevation: 0,
+      color: const Color(0xFFF7FAFD),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFFDDE7EE)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              eyebrow,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.blueGrey.shade700,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F0F6),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                eyebrow,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF496172),
+                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Text(
               headline,
               style: const TextStyle(
-                fontSize: 30,
-                height: 1.15,
-                fontWeight: FontWeight.bold,
+                fontSize: 26,
+                height: 1.2,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF16202A),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             Text(
               body,
               style: const TextStyle(
                 fontSize: 16,
-                height: 1.55,
-                color: Colors.black87,
+                height: 1.7,
+                color: Color(0xFF334155),
               ),
             ),
           ],
@@ -3634,47 +3492,54 @@ class _HeroReplyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 18),
+      elevation: 0,
+      color: const Color(0xFFF8FBFE),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFFD9E6EE)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.blueGrey.shade50,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blueGrey.shade700,
-                    ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF2F7),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF496172),
                   ),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FBFD),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: const Color(0xFFD8E4EC),
-                ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFD7E5EE)),
               ),
               child: Text(
                 body,
                 style: const TextStyle(
-                  fontSize: 18,
-                  height: 1.65,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 19,
+                  height: 1.75,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF17212B),
                 ),
               ),
             ),
@@ -3684,8 +3549,8 @@ class _HeroReplyCard extends StatelessWidget {
                 helperText!,
                 style: const TextStyle(
                   fontSize: 13,
-                  height: 1.5,
-                  color: Colors.black54,
+                  height: 1.6,
+                  color: Color(0xFF607080),
                 ),
               ),
             ],
@@ -3694,8 +3559,17 @@ class _HeroReplyCard extends StatelessWidget {
               onPressed: () => copyText(context, body),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
-              child: Text(buttonLabel),
+              child: Text(
+                buttonLabel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -3705,10 +3579,7 @@ class _HeroReplyCard extends StatelessWidget {
 }
 
 class _ResultCard extends StatelessWidget {
-  const _ResultCard({
-    required this.title,
-    required this.child,
-  });
+  const _ResultCard({required this.title, required this.child});
 
   final String title;
   final Widget child;
@@ -3717,17 +3588,24 @@ class _ResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
+      elevation: 0,
+      color: const Color(0xFFF9FBFD),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFFE2EAF0)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
               style: const TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 height: 1.2,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF16202A),
               ),
             ),
             const SizedBox(height: 14),
@@ -3740,9 +3618,7 @@ class _ResultCard extends StatelessWidget {
 }
 
 class _ReplyOptionCard extends StatelessWidget {
-  const _ReplyOptionCard({
-    required this.option,
-  });
+  const _ReplyOptionCard({required this.option});
 
   final ReplyOption option;
 
@@ -3750,28 +3626,52 @@ class _ReplyOptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: Colors.blueGrey.shade50,
       elevation: 0,
+      color: const Color(0xFFF3F7FA),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFE0E8EE)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               option.title,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF243443),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               option.body,
-              style: const TextStyle(height: 1.5),
+              style: const TextStyle(
+                fontSize: 16,
+                height: 1.65,
+                color: Color(0xFF243443),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton(
                 onPressed: () => copyText(context, option.body),
-                child: const Text('コピー'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                child: const Text(
+                  'コピー',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
           ],
@@ -3782,9 +3682,7 @@ class _ReplyOptionCard extends StatelessWidget {
 }
 
 class _SimpleReplyCard extends StatelessWidget {
-  const _SimpleReplyCard({
-    required this.text,
-  });
+  const _SimpleReplyCard({required this.text});
 
   final String text;
 
@@ -3792,23 +3690,43 @@ class _SimpleReplyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: Colors.blueGrey.shade50,
       elevation: 0,
+      color: const Color(0xFFF3F7FA),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFE0E8EE)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               text,
-              style: const TextStyle(height: 1.5),
+              style: const TextStyle(
+                fontSize: 16,
+                height: 1.65,
+                color: Color(0xFF243443),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton(
                 onPressed: () => copyText(context, text),
-                child: const Text('コピー'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                child: const Text(
+                  'コピー',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
           ],
@@ -3844,23 +3762,11 @@ List<ThemeQuestion> _buildQuestions({
       ),
       ThemeQuestion(
         title: '主に不満を感じているのは誰ですか？',
-        options: [
-          '自分',
-          '相手',
-          'お互い',
-          'わからない',
-        ],
+        options: ['自分', '相手', 'お互い', 'わからない'],
       ),
       ThemeQuestion(
         title: '今の気持ちに近いものはどれですか？',
-        options: [
-          '不安',
-          '怒り',
-          '寂しさ',
-          '呆れ',
-          '罪悪感',
-          '混乱',
-        ],
+        options: ['不安', '怒り', '寂しさ', '呆れ', '罪悪感', '混乱'],
       ),
     ];
   }
@@ -3880,21 +3786,11 @@ List<ThemeQuestion> _buildQuestions({
       ),
       ThemeQuestion(
         title: 'そのやり取りはどこで起きましたか？',
-        options: [
-          'LINE',
-          '電話',
-          '対面',
-          '複数',
-        ],
+        options: ['LINE', '電話', '対面', '複数'],
       ),
       ThemeQuestion(
         title: '今いちばん近い希望はどれですか？',
-        options: [
-          'まず謝りたい',
-          'きつかったことを伝えたい',
-          'これ以上悪化させたくない',
-          '少し距離を置きたい',
-        ],
+        options: ['まず謝りたい', 'きつかったことを伝えたい', 'これ以上悪化させたくない', '少し距離を置きたい'],
       ),
     ];
   }
@@ -3903,33 +3799,15 @@ List<ThemeQuestion> _buildQuestions({
     return const [
       ThemeQuestion(
         title: 'どんな約束でしたか？',
-        options: [
-          '会う約束',
-          '連絡の約束',
-          '時間の約束',
-          'お金の約束',
-          '手伝いの約束',
-          'その他',
-        ],
+        options: ['会う約束', '連絡の約束', '時間の約束', 'お金の約束', '手伝いの約束', 'その他'],
       ),
       ThemeQuestion(
         title: '約束が守られなかったのは誰ですか？',
-        options: [
-          '自分',
-          '相手',
-          'お互い',
-          'はっきりしない',
-        ],
+        options: ['自分', '相手', 'お互い', 'はっきりしない'],
       ),
       ThemeQuestion(
         title: '今の気持ちに近いものはどれですか？',
-        options: [
-          '裏切られた感じ',
-          '軽く扱われた感じ',
-          '申し訳なさ',
-          '怒り',
-          '悲しさ',
-        ],
+        options: ['裏切られた感じ', '軽く扱われた感じ', '申し訳なさ', '怒り', '悲しさ'],
       ),
     ];
   }
@@ -3937,33 +3815,15 @@ List<ThemeQuestion> _buildQuestions({
   return const [
     ThemeQuestion(
       title: 'どんなことがきっかけでしたか？',
-      options: [
-        '言い方',
-        '連絡',
-        '約束',
-        'お金',
-        '距離感',
-        '価値観',
-        'その他',
-      ],
+      options: ['言い方', '連絡', '約束', 'お金', '距離感', '価値観', 'その他'],
     ),
     ThemeQuestion(
       title: '主に不満を感じているのは誰ですか？',
-      options: [
-        '自分',
-        '相手',
-        'お互い',
-        'わからない',
-      ],
+      options: ['自分', '相手', 'お互い', 'わからない'],
     ),
     ThemeQuestion(
       title: '今どうしたいですか？',
-      options: [
-        '謝りたい',
-        '誤解を解きたい',
-        '落ち着かせたい',
-        '距離を置きたい',
-      ],
+      options: ['謝りたい', '誤解を解きたい', '落ち着かせたい', '距離を置きたい'],
     ),
   ];
 }
