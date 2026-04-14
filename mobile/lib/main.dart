@@ -3239,6 +3239,33 @@ class ResultScreen extends StatelessWidget {
                   '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
                 ),
               ),
+            if (draft.relationLabel != null || draft.relationDetails.isNotEmpty)
+              _ResultCard(
+                title: '読み取った関係性',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (draft.relationLabel != null)
+                      Text(
+                        draft.relationLabel!,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    if (draft.relationDetails.isNotEmpty) ...[
+                      if (draft.relationLabel != null)
+                        const SizedBox(height: 10),
+                      ...draft.relationDetails.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('・$item'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             _DecisionSummaryCard(
               eyebrow: '今のおすすめ',
               headline: result.sendTimingLabel,
@@ -3361,6 +3388,33 @@ class PrecheckResultScreen extends StatelessWidget {
                 title: '適用したプロフィール',
                 child: Text(
                   '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                ),
+              ),
+            if (draft.relationLabel != null || draft.relationDetails.isNotEmpty)
+              _ResultCard(
+                title: '読み取った関係性',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (draft.relationLabel != null)
+                      Text(
+                        draft.relationLabel!,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    if (draft.relationDetails.isNotEmpty) ...[
+                      if (draft.relationLabel != null)
+                        const SizedBox(height: 10),
+                      ...draft.relationDetails.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('・$item'),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             _DecisionSummaryCard(
