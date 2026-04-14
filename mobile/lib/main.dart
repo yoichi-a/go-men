@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -1673,6 +1675,13 @@ class GoalScreen extends StatelessWidget {
   }
 }
 
+class _PickedScreenshot {
+  const _PickedScreenshot({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+}
+
 class EvidenceInputScreen extends StatefulWidget {
   const EvidenceInputScreen({super.key, required this.draft});
 
@@ -1684,13 +1693,14 @@ class EvidenceInputScreen extends StatefulWidget {
 
 class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
   late final TextEditingController _chatController;
-  late List<String> _screenshots;
+  final ImagePicker _picker = ImagePicker();
+  final List<_PickedScreenshot> _pickedScreenshots = [];
+  bool _isPicking = false;
 
   @override
   void initState() {
     super.initState();
     _chatController = TextEditingController(text: widget.draft.chatText ?? '');
-    _screenshots = List<String>.from(widget.draft.screenshotNames);
   }
 
   @override
@@ -1699,15 +1709,64 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
     super.dispose();
   }
 
-  void _addDummyScreenshot() {
+  Future<void> _pickScreenshot() async {
+    if (_isPicking) return;
+
     setState(() {
-      _screenshots = [..._screenshots, 'スクショ ${_screenshots.length + 1}'];
+      _isPicking = true;
     });
+
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1440,
+      );
+
+      if (file == null) {
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('画像を読み込めませんでした')));
+        return;
+      }
+
+      final fileName = file.name.trim().isEmpty
+          ? 'screenshot_\${DateTime.now().millisecondsSinceEpoch}.png'
+          : file.name.trim();
+
+      if (!mounted) return;
+
+      setState(() {
+        _pickedScreenshots.add(_PickedScreenshot(name: fileName, bytes: bytes));
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('スクリーンショットを追加しました')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('スクリーンショットを追加できませんでした: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPicking = false;
+        });
+      }
+    }
   }
 
-  void _removeScreenshot(String name) {
+  void _removeScreenshotAt(int index) {
     setState(() {
-      _screenshots = _screenshots.where((item) => item != name).toList();
+      _pickedScreenshots.removeAt(index);
     });
   }
 
@@ -1719,7 +1778,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
         builder: (_) => NoteScreen(
           draft: widget.draft.copyWith(
             chatText: chatText.isEmpty ? null : chatText,
-            screenshotNames: List<String>.from(_screenshots),
+            screenshotNames: _pickedScreenshots.map((e) => e.name).toList(),
           ),
         ),
       ),
@@ -1739,10 +1798,56 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
     );
   }
 
+  Widget _buildPreviewCard(_PickedScreenshot shot, int index) {
+    return Container(
+      width: 138,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFD6DEE6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 0.72,
+              child: Image.memory(
+                shot.bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            shot.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          TextButton.icon(
+            onPressed: () => _removeScreenshotAt(index),
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('削除'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              minimumSize: const Size.fromHeight(36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasInput =
-        _chatController.text.trim().isNotEmpty || _screenshots.isNotEmpty;
+        _chatController.text.trim().isNotEmpty || _pickedScreenshots.isNotEmpty;
 
     return ConsultationScaffold(
       currentStep: 7,
@@ -1755,36 +1860,32 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               OutlinedButton.icon(
-                onPressed: _addDummyScreenshot,
+                onPressed: _isPicking ? null : _pickScreenshot,
                 icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: const Text('スクリーンショットを追加'),
+                label: Text(_isPicking ? '読み込み中...' : 'スクリーンショットを追加'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
               const SizedBox(height: 12),
               const Text(
-                'この段階ではUIだけ先に作っています。ボタンを押すと仮のスクショタグが増えます。',
+                'スクリーンショットを1枚ずつ追加できます。',
                 style: TextStyle(fontSize: 13, color: Colors.black54),
               ),
               const SizedBox(height: 16),
-              if (_screenshots.isNotEmpty) ...[
+              if (_pickedScreenshots.isNotEmpty) ...[
                 const Text(
                   '追加したスクリーンショット',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _screenshots
-                      .map(
-                        (shot) => Chip(
-                          label: Text(shot),
-                          onDeleted: () => _removeScreenshot(shot),
-                        ),
-                      )
-                      .toList(),
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (var i = 0; i < _pickedScreenshots.length; i++)
+                      _buildPreviewCard(_pickedScreenshots[i], i),
+                  ],
                 ),
                 const SizedBox(height: 24),
               ],
