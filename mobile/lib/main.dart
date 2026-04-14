@@ -189,8 +189,19 @@ class RelationshipProfile {
         return '恋人・パートナー';
       case 'friend':
         return '友人';
+      case 'family':
+        return '家族';
+      case 'family_parent_child':
       case 'parent_child':
-        return '親子';
+        return '家族 / 親子';
+      case 'family_sibling':
+        return '家族 / 兄弟姉妹';
+      case 'family_inlaw':
+        return '家族 / 義家族';
+      case 'family_other':
+        return '家族 / その他';
+      case 'other':
+        return 'その他';
       default:
         return '未設定';
     }
@@ -252,6 +263,7 @@ class ConsultationDraft {
   const ConsultationDraft({
     this.relationType,
     this.relationLabel,
+    this.relationDetails = const [],
     this.theme,
     this.themeAnswers = const [],
     this.currentStatus,
@@ -266,6 +278,7 @@ class ConsultationDraft {
 
   final String? relationType;
   final String? relationLabel;
+  final List<String> relationDetails;
   final String? theme;
   final List<String> themeAnswers;
   final String? currentStatus;
@@ -280,6 +293,7 @@ class ConsultationDraft {
   ConsultationDraft copyWith({
     String? relationType,
     String? relationLabel,
+    List<String>? relationDetails,
     String? theme,
     List<String>? themeAnswers,
     String? currentStatus,
@@ -294,6 +308,7 @@ class ConsultationDraft {
     return ConsultationDraft(
       relationType: relationType ?? this.relationType,
       relationLabel: relationLabel ?? this.relationLabel,
+      relationDetails: relationDetails ?? this.relationDetails,
       theme: theme ?? this.theme,
       themeAnswers: themeAnswers ?? this.themeAnswers,
       currentStatus: currentStatus ?? this.currentStatus,
@@ -1242,7 +1257,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             const SizedBox(height: 10),
             _relationButton('friend', '友人'),
             const SizedBox(height: 10),
-            _relationButton('parent_child', '親子'),
+            _relationButton('family', '家族'),
+            const SizedBox(height: 10),
+            _relationButton('other', 'その他'),
             const SizedBox(height: 24),
             const Text(
               '傷つきやすい言い方',
@@ -1354,16 +1371,49 @@ class RelationTypeScreen extends StatelessWidget {
     String relationType,
     String label,
   ) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ThemeSelectionScreen(
+    late final Widget nextScreen;
+
+    switch (relationType) {
+      case 'couple':
+        nextScreen = CoupleSelfGenderScreen(
           draft: ConsultationDraft(
             relationType: relationType,
             relationLabel: label,
+            relationDetails: const [],
           ),
-        ),
-      ),
-    );
+        );
+        break;
+      case 'friend':
+        nextScreen = FriendContextScreen(
+          draft: ConsultationDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+          ),
+        );
+        break;
+      case 'family':
+        nextScreen = FamilyTypeScreen(
+          draft: ConsultationDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+          ),
+        );
+        break;
+      case 'other':
+      default:
+        nextScreen = ThemeSelectionScreen(
+          draft: ConsultationDraft(
+            relationType: relationType,
+            relationLabel: label,
+            relationDetails: const [],
+          ),
+        );
+        break;
+    }
+
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => nextScreen));
   }
 
   @override
@@ -1388,12 +1438,325 @@ class RelationTypeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: () => _selectRelation(context, 'parent_child', '親子'),
+            onPressed: () => _selectRelation(context, 'family', '家族'),
             style: elevatedChoiceStyle,
-            child: const Text('親子', style: choiceTextStyle),
+            child: const Text('家族', style: choiceTextStyle),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed: () => _selectRelation(context, 'other', 'その他'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+            ),
+            child: const Text('その他', style: choiceTextStyle),
           ),
         ],
       ),
+    );
+  }
+}
+
+class RelationSingleChoiceScreen extends StatelessWidget {
+  const RelationSingleChoiceScreen({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.question,
+    required this.options,
+    required this.onSelected,
+  });
+
+  final String title;
+  final String subtitle;
+  final String question;
+  final List<String> options;
+  final void Function(BuildContext context, String value) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConsultationScaffold(
+      currentStep: 1,
+      title: title,
+      subtitle: subtitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            question,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          ...options.expand(
+            (option) => [
+              ElevatedButton(
+                onPressed: () => onSelected(context, option),
+                style: elevatedChoiceStyle,
+                child: Text(option, style: choiceTextStyle),
+              ),
+              const SizedBox(height: 14),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CoupleSelfGenderScreen extends StatelessWidget {
+  const CoupleSelfGenderScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'ここが細かいほど、返信候補がより自然になります',
+      question: 'あなたは？',
+      options: const ['男性', '女性', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CouplePartnerGenderScreen(
+              draft: draft.copyWith(relationDetails: ['自分: $value']),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class CouplePartnerGenderScreen extends StatelessWidget {
+  const CouplePartnerGenderScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'ここが細かいほど、返信候補がより自然になります',
+      question: '相手は？',
+      options: const ['男性', '女性', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FriendContextScreen extends StatelessWidget {
+  const FriendContextScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '友人の種類で、自然な距離感がかなり変わります',
+      question: 'どこでの友人ですか？',
+      options: const ['学校', '職場', '地元', '趣味コミュニティ', 'そのほか'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(relationDetails: ['$valueの友人']),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FamilyTypeScreen extends StatelessWidget {
+  const FamilyTypeScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '家族の中の関係で、伝わり方がかなり変わります',
+      question: '家族の中ではどの関係ですか？',
+      options: const ['親子', '兄弟姉妹', '義家族', 'そのほか'],
+      onSelected: (context, value) {
+        if (value == '親子') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => FamilyParentRoleScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_parent_child',
+                  relationLabel: '家族 / 親子',
+                  relationDetails: ['親子'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (value == '兄弟姉妹') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => FamilySiblingScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_sibling',
+                  relationLabel: '家族 / 兄弟姉妹',
+                  relationDetails: ['兄弟姉妹'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (value == '義家族') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => FamilyInlawScreen(
+                draft: draft.copyWith(
+                  relationType: 'family_inlaw',
+                  relationLabel: '家族 / 義家族',
+                  relationDetails: ['義家族'],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(
+                relationType: 'family_other',
+                relationLabel: '家族 / その他',
+                relationDetails: ['家族 / その他'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FamilyParentRoleScreen extends StatelessWidget {
+  const FamilyParentRoleScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '親子でも立場で返し方が変わります',
+      question: 'あなたはどちらですか？',
+      options: const ['親', '子'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => FamilyParentGenderScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '自分: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FamilyParentGenderScreen extends StatelessWidget {
+  const FamilyParentGenderScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: 'この違いも会話のトーンに影響します',
+      question: '親は？',
+      options: const ['母', '父', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '親: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FamilySiblingScreen extends StatelessWidget {
+  const FamilySiblingScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '兄姉か弟妹かで距離感が変わります',
+      question: '相手は？',
+      options: const ['兄', '姉', '弟', '妹', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class FamilyInlawScreen extends StatelessWidget {
+  const FamilyInlawScreen({super.key, required this.draft});
+
+  final ConsultationDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return RelationSingleChoiceScreen(
+      title: 'もう少し関係を教えてください',
+      subtitle: '義家族の中でも関係の近さがかなり違います',
+      question: '相手は？',
+      options: const ['義母', '義父', '義兄弟姉妹', 'そのほか', '答えない'],
+      onSelected: (context, value) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: draft.copyWith(
+                relationDetails: [...draft.relationDetails, '相手: $value'],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1416,18 +1779,55 @@ class ThemeSelectionScreen extends StatelessWidget {
           '価値観の違い',
           'その他',
         ];
+      case 'family_parent_child':
       case 'parent_child':
         return [
           '連絡頻度',
           '言い方がきつい',
-          '約束',
-          '干渉・信頼',
+          '口出し・干渉',
+          '信頼されていない感じ',
           'お金',
-          '手伝い・役割分担',
+          '家のこと・役割分担',
           '距離感',
           '価値観の違い',
           'その他',
         ];
+      case 'family_sibling':
+        return [
+          '言い方がきつい',
+          '親を挟んだ揉めごと',
+          '比較される',
+          'お金',
+          '家のこと・役割分担',
+          '距離感',
+          '価値観の違い',
+          'その他',
+        ];
+      case 'family_inlaw':
+        return [
+          '言い方がきつい',
+          '行事・付き合い',
+          '生活や子育てへの口出し',
+          'パートナー経由の伝わり方',
+          'お金',
+          '距離感',
+          '価値観の違い',
+          'その他',
+        ];
+      case 'family':
+      case 'family_other':
+        return [
+          '連絡頻度',
+          '言い方がきつい',
+          '干渉・信頼',
+          'お金',
+          '家のこと',
+          '距離感',
+          '価値観の違い',
+          'その他',
+        ];
+      case 'other':
+        return ['連絡頻度', '言い方がきつい', '約束', '距離感', 'お金', '価値観の違い', 'その他'];
       case 'couple':
       default:
         return [
@@ -2079,6 +2479,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'relation_type': widget.draft.relationType,
+          'relation_detail_labels': widget.draft.relationDetails,
           'theme': widget.draft.theme,
           'theme_details': widget.draft.themeAnswers,
           'current_status': widget.draft.currentStatus,
@@ -2298,7 +2699,9 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
             const SizedBox(height: 10),
             _relationButton('friend', '友人'),
             const SizedBox(height: 10),
-            _relationButton('parent_child', '親子'),
+            _relationButton('family', '家族'),
+            const SizedBox(height: 10),
+            _relationButton('other', 'その他'),
             const SizedBox(height: 28),
             const Text(
               '送ろうとしている文',

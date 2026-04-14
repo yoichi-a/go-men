@@ -38,6 +38,7 @@ def health():
 
 class ConsultSessionRequest(BaseModel):
     relation_type: str
+    relation_detail_labels: List[str] = Field(default_factory=list)
     theme: str
     theme_details: List[str]
     current_status: str
@@ -445,6 +446,7 @@ next_actions / pre_send_cautions のルール:
 
 入力:
 relation_type: {request.relation_type}
+relation_detail_labels: {request.relation_detail_labels}
 theme: {request.theme}
 theme_details: {request.theme_details}
 current_status: {request.current_status}
