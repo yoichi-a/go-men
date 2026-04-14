@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -163,6 +162,7 @@ class RelationshipProfile {
     required this.id,
     required this.displayName,
     required this.relationType,
+    this.relationDetails = const [],
     required this.sensitiveTo,
     required this.worksWellWith,
     required this.distancePreference,
@@ -182,6 +182,21 @@ class RelationshipProfile {
   final String avoidWords;
   final String notes;
   final String createdAt;
+  final List<String> relationDetails;
+
+  String get relationDetailSummary {
+    return relationDetails
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .join(' / ');
+  }
+
+  String get relationSummaryLabel {
+    if (relationDetailSummary.isEmpty) {
+      return relationLabel;
+    }
+    return '$relationLabel / $relationDetailSummary';
+  }
 
   String get relationLabel {
     switch (relationType) {
@@ -210,7 +225,7 @@ class RelationshipProfile {
   String toProfileContext() {
     return '''
 相手の名前・呼び名: $displayName
-関係性: $relationLabel
+関係性: $relationSummaryLabel
 傷つきやすい言い方: ${sensitiveTo.isEmpty ? '未設定' : sensitiveTo}
 通りやすい伝え方: ${worksWellWith.isEmpty ? '未設定' : worksWellWith}
 距離感の傾向: ${distancePreference.isEmpty ? '未設定' : distancePreference}
@@ -226,6 +241,7 @@ class RelationshipProfile {
       'id': id,
       'displayName': displayName,
       'relationType': relationType,
+      'relationDetails': relationDetails,
       'sensitiveTo': sensitiveTo,
       'worksWellWith': worksWellWith,
       'distancePreference': distancePreference,
@@ -241,6 +257,11 @@ class RelationshipProfile {
       id: map['id'] as String,
       displayName: map['displayName'] as String,
       relationType: map['relationType'] as String,
+      relationDetails:
+          (map['relationDetails'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       sensitiveTo: map['sensitiveTo'] as String? ?? '',
       worksWellWith: map['worksWellWith'] as String? ?? '',
       distancePreference: map['distancePreference'] as String? ?? '',
@@ -682,7 +703,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    profile.relationLabel,
+                    profile.relationSummaryLabel,
                     style: const TextStyle(fontSize: 16, color: Colors.black54),
                   ),
                   const SizedBox(height: 20),
@@ -867,7 +888,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Text(profile.relationLabel),
+                          Text(profile.relationSummaryLabel),
                           const SizedBox(height: 10),
                           Text(
                             '傷つきやすい: ${profile.sensitiveTo.isEmpty ? '未設定' : profile.sensitiveTo}',
@@ -956,7 +977,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               builder: (_) => ThemeSelectionScreen(
                                 draft: ConsultationDraft(
                                   relationType: profile.relationType,
-                                  relationLabel: profile.relationLabel,
+                                  relationLabel: profile.relationSummaryLabel,
                                   selectedProfile: profile,
                                 ),
                               ),
@@ -1090,6 +1111,77 @@ class _ProfileDetailItem extends StatelessWidget {
   }
 }
 
+class _RelationDetailGroup {
+  const _RelationDetailGroup({required this.title, required this.options});
+
+  final String title;
+  final List<String> options;
+}
+
+List<_RelationDetailGroup> _profileRelationDetailGroupsFor(
+  String? relationType,
+) {
+  switch (relationType) {
+    case 'couple':
+      return const [
+        _RelationDetailGroup(
+          title: 'あなたについて',
+          options: ['自分: 男性', '自分: 女性', '自分: 答えない'],
+        ),
+        _RelationDetailGroup(
+          title: '相手について',
+          options: ['相手: 男性', '相手: 女性', '相手: 答えない'],
+        ),
+      ];
+    case 'friend':
+      return const [
+        _RelationDetailGroup(
+          title: 'どんな友人ですか？',
+          options: [
+            '学校の友人',
+            '職場の友人',
+            '昔からの友人',
+            '趣味・コミュニティの友人',
+            'オンラインの友人',
+            'その他の友人',
+          ],
+        ),
+      ];
+    case 'family':
+    case 'parent_child':
+    case 'family_parent_child':
+    case 'family_sibling':
+    case 'family_inlaw':
+    case 'family_other':
+      return const [
+        _RelationDetailGroup(
+          title: '相手は誰ですか？',
+          options: [
+            '母',
+            '父',
+            '娘',
+            '息子',
+            '姉',
+            '兄',
+            '妹',
+            '弟',
+            '義母',
+            '義父',
+            '義姉',
+            '義兄',
+            '義妹',
+            '義弟',
+            '祖母',
+            '祖父',
+            'その他の家族',
+          ],
+        ),
+      ];
+    default:
+      return const [];
+  }
+}
+
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key, this.profile});
 
@@ -1109,6 +1201,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late final TextEditingController _notesController;
 
   String? _relationType;
+  List<String> _relationDetails = <String>[];
 
   @override
   void initState() {
@@ -1133,6 +1226,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
     _notesController = TextEditingController(text: widget.profile?.notes ?? '');
     _relationType = widget.profile?.relationType;
+    _relationDetails = List<String>.from(
+      widget.profile?.relationDetails ?? const [],
+    );
   }
 
   @override
@@ -1168,6 +1264,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           DateTime.now().microsecondsSinceEpoch.toString(),
       displayName: _nameController.text.trim(),
       relationType: _relationType!,
+      relationDetails: List<String>.from(_relationDetails),
       sensitiveTo: _sensitiveToController.text.trim(),
       worksWellWith: _worksWellWithController.text.trim(),
       distancePreference: _distanceController.text.trim(),
@@ -1189,6 +1286,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     Navigator.of(context).pop();
   }
 
+  List<_RelationDetailGroup> get _relationDetailGroups {
+    return _profileRelationDetailGroupsFor(_relationType);
+  }
+
+  void _selectRelationDetail(_RelationDetailGroup group, String option) {
+    setState(() {
+      _relationDetails.removeWhere((item) => group.options.contains(item));
+      _relationDetails.add(option);
+    });
+  }
+
   Widget _relationButton(String value, String label) {
     final selected = _relationType == value;
 
@@ -1197,6 +1305,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         onPressed: () {
           setState(() {
             _relationType = value;
+            _relationDetails = <String>[];
           });
         },
         style: ElevatedButton.styleFrom(
@@ -1264,6 +1373,46 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             _relationButton('family', '家族'),
             const SizedBox(height: 10),
             _relationButton('other', 'その他'),
+            if (_relationDetailGroups.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'もう少し詳しく',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'ここを入れておくと、相談時の言い換えがより相手に合いやすくなります',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.black54,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final group in _relationDetailGroups) ...[
+                Text(
+                  group.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final option in group.options)
+                      ChoiceChip(
+                        label: Text(option),
+                        selected: _relationDetails.contains(option),
+                        onSelected: (_) => _selectRelationDetail(group, option),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+              ],
+            ],
             const SizedBox(height: 24),
             const Text(
               '傷つきやすい言い方',
@@ -3022,7 +3171,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(profile.relationLabel),
+                      Text(profile.relationSummaryLabel),
                     ],
                   ),
                 ),
