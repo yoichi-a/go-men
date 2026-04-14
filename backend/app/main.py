@@ -47,6 +47,7 @@ class ConsultSessionRequest(BaseModel):
     note: Optional[str] = None
     profile_context: Optional[str] = None
     recent_pattern_summary: Optional[str] = None
+    screenshots_base64: List[str] = Field(default_factory=list)
     upload_ids: List[str] = Field(default_factory=list)
 
 
@@ -544,6 +545,30 @@ draft_message: {request.draft_message}
 """.strip()
 
 
+def build_consult_input(request: ConsultSessionRequest) -> List[dict[str, Any]]:
+    content: List[dict[str, Any]] = [
+        {
+            "type": "input_text",
+            "text": build_consult_prompt(request),
+        }
+    ]
+
+    for image_base64 in request.screenshots_base64[:3]:
+        cleaned = image_base64.strip()
+        if not cleaned:
+            continue
+
+        content.append(
+            {
+                "type": "input_image",
+                "image_url": f"data:image/png;base64,{cleaned}",
+                "detail": "auto",
+            }
+        )
+
+    return [{"role": "user", "content": content}]
+
+
 @app.post("/consult/sessions")
 def create_consult_session(request: ConsultSessionRequest):
     if client is None:
@@ -560,7 +585,7 @@ def create_consult_session(request: ConsultSessionRequest):
                 "Output valid JSON only. "
                 "Prioritize concrete, copy-ready Japanese replies over generic advice."
             ),
-            input=build_consult_prompt(request),
+            input=build_consult_input(request),
             text={"format": {"type": "json_object"}},
         )
 

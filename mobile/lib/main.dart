@@ -241,6 +241,13 @@ class RelationshipProfile {
   }
 }
 
+class DraftScreenshot {
+  const DraftScreenshot({required this.name, required this.bytesBase64});
+
+  final String name;
+  final String bytesBase64;
+}
+
 class ConsultationDraft {
   const ConsultationDraft({
     this.relationType,
@@ -253,6 +260,7 @@ class ConsultationDraft {
     this.chatText,
     this.note,
     this.screenshotNames = const [],
+    this.screenshots = const [],
     this.selectedProfile,
   });
 
@@ -266,6 +274,7 @@ class ConsultationDraft {
   final String? chatText;
   final String? note;
   final List<String> screenshotNames;
+  final List<DraftScreenshot> screenshots;
   final RelationshipProfile? selectedProfile;
 
   ConsultationDraft copyWith({
@@ -279,6 +288,7 @@ class ConsultationDraft {
     String? chatText,
     String? note,
     List<String>? screenshotNames,
+    List<DraftScreenshot>? screenshots,
     RelationshipProfile? selectedProfile,
   }) {
     return ConsultationDraft(
@@ -292,6 +302,7 @@ class ConsultationDraft {
       chatText: chatText ?? this.chatText,
       note: note ?? this.note,
       screenshotNames: screenshotNames ?? this.screenshotNames,
+      screenshots: screenshots ?? this.screenshots,
       selectedProfile: selectedProfile ?? this.selectedProfile,
     );
   }
@@ -1701,6 +1712,17 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
   void initState() {
     super.initState();
     _chatController = TextEditingController(text: widget.draft.chatText ?? '');
+
+    for (final shot in widget.draft.screenshots) {
+      try {
+        _pickedScreenshots.add(
+          _PickedScreenshot(
+            name: shot.name,
+            bytes: base64Decode(shot.bytesBase64),
+          ),
+        );
+      } catch (_) {}
+    }
   }
 
   @override
@@ -1779,6 +1801,14 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
           draft: widget.draft.copyWith(
             chatText: chatText.isEmpty ? null : chatText,
             screenshotNames: _pickedScreenshots.map((e) => e.name).toList(),
+            screenshots: _pickedScreenshots
+                .map(
+                  (e) => DraftScreenshot(
+                    name: e.name,
+                    bytesBase64: base64Encode(e.bytes),
+                  ),
+                )
+                .toList(),
           ),
         ),
       ),
@@ -1792,6 +1822,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
           draft: widget.draft.copyWith(
             chatText: null,
             screenshotNames: const [],
+            screenshots: const [],
           ),
         ),
       ),
@@ -2057,6 +2088,9 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           'note': widget.draft.note,
           'profile_context': profile?.toProfileContext(),
           'recent_pattern_summary': recentPatternSummary,
+          'screenshots_base64': widget.draft.screenshots
+              .map((e) => e.bytesBase64)
+              .toList(),
           'upload_ids': <String>[],
         }),
       );
