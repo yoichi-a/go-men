@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await GoMenPlanStorage.ensureLoaded();
   await GoMenThemeStorage.ensureLoaded();
   runApp(const GoMenApp());
 }
@@ -44,10 +45,55 @@ String extractConsultTheme(String title) {
   return '';
 }
 
+enum GoMenPlan { free, pro }
+
 class PlanLimits {
   static const int freeDailyUses = 3;
   static const int freeSavedResults = 3;
   static const int freeProfiles = 1;
+  static const int proSavedResults = 9999;
+  static const int proProfiles = 9999;
+
+  static int savedResultsForPlan(GoMenPlan plan) {
+    return plan == GoMenPlan.pro ? proSavedResults : freeSavedResults;
+  }
+
+  static int profilesForPlan(GoMenPlan plan) {
+    return plan == GoMenPlan.pro ? proProfiles : freeProfiles;
+  }
+
+  static String labelForPlan(GoMenPlan plan) {
+    return plan == GoMenPlan.pro ? 'Go-men Pro' : '無料版';
+  }
+}
+
+class GoMenPlanStorage {
+  static const _key = 'go_men_plan';
+  static final ValueNotifier<GoMenPlan> notifier = ValueNotifier(
+    GoMenPlan.free,
+  );
+
+  static bool get isProSync => notifier.value == GoMenPlan.pro;
+
+  static Future<void> ensureLoaded() async {
+    notifier.value = await loadPlan();
+  }
+
+  static Future<GoMenPlan> loadPlan() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+
+    if (raw == 'pro') {
+      return GoMenPlan.pro;
+    }
+    return GoMenPlan.free;
+  }
+
+  static Future<void> setPlan(GoMenPlan plan) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, plan == GoMenPlan.pro ? 'pro' : 'free');
+    notifier.value = plan;
+  }
 }
 
 List<String> uniquePreserveOrder(List<String> items) {
@@ -141,8 +187,6 @@ class GoMenThemeSpec {
   final String description;
 }
 
-const bool kGoMenPremiumUnlocked = false;
-
 GoMenThemeSpec goMenThemeSpecFor(GoMenThemeMode mode) {
   switch (mode) {
     case GoMenThemeMode.gold:
@@ -221,7 +265,7 @@ class GoMenThemeStorage {
   );
 
   static bool canUse(GoMenThemeMode mode) {
-    return mode == GoMenThemeMode.ivory || kGoMenPremiumUnlocked;
+    return mode == GoMenThemeMode.ivory || GoMenPlanStorage.isProSync;
   }
 
   static Future<void> ensureLoaded() async {
@@ -815,7 +859,14 @@ class ProfileStorage {
 
 class LocalHistoryStorage {
   static const _key = 'go_men_saved_results';
-  static const maxItems = PlanLimits.freeSavedResults;
+
+  static int get maxItems =>
+      PlanLimits.savedResultsForPlan(GoMenPlanStorage.notifier.value);
+
+  static Future<int> _maxItems() async {
+    final plan = await GoMenPlanStorage.loadPlan();
+    return PlanLimits.savedResultsForPlan(plan);
+  }
 
   static Future<List<SavedResultItem>> loadItems() async {
     final prefs = await SharedPreferences.getInstance();
@@ -839,6 +890,7 @@ class LocalHistoryStorage {
     final prefs = await SharedPreferences.getInstance();
     final current = await loadItems();
     final updated = [item, ...current];
+    final maxItems = await _maxItems();
     final trimmed = updated.take(maxItems).toList();
 
     await prefs.setString(
@@ -4059,7 +4111,8 @@ class SettingsHubScreen extends StatelessWidget {
                               spec: theme,
                               isSelected: currentMode == theme.mode,
                               isLocked:
-                                  theme.isPremium && !kGoMenPremiumUnlocked,
+                                  theme.isPremium &&
+                                  !GoMenPlanStorage.isProSync,
                               onTap: () => _handleThemeTap(context, theme.mode),
                             ),
                           ),
