@@ -62,6 +62,14 @@ class PrecheckRequest(BaseModel):
     optional_context_upload_ids: List[str] = Field(default_factory=list)
 
 
+class CompatibilityRequest(BaseModel):
+    relation_type: str
+    relation_detail_labels: List[str] = Field(default_factory=list)
+    profile_context: Optional[str] = None
+    recent_pattern_summary: Optional[str] = None
+    optional_note: Optional[str] = None
+
+
 def parse_json_text(result_text: str) -> dict[str, Any]:
     cleaned = result_text.strip()
 
@@ -261,6 +269,107 @@ def build_context_block(
         sections.append(f"【今回の補足】\n{optional_context_text.strip()}")
 
     return "\n\n".join(sections).strip()
+
+
+
+def normalize_compatibility_result(data: dict[str, Any]) -> dict[str, Any]:
+    def clamp_score(value: Any, fallback: int) -> int:
+        try:
+            score = int(value)
+        except Exception:
+            score = fallback
+        return max(0, min(100, score))
+
+    subscores_raw = data.get("subscores")
+    if not isinstance(subscores_raw, dict):
+        subscores_raw = {}
+
+    return {
+        "score": clamp_score(data.get("score"), 72),
+        "headline": str(data.get("headline") or "相性の土台はある一方で、すれ違い方に一定の傾向があります。"),
+        "subscores": {
+            "communication": clamp_score(subscores_raw.get("communication"), 74),
+            "emotional_safety": clamp_score(subscores_raw.get("emotional_safety"), 68),
+            "repair_ability": clamp_score(subscores_raw.get("repair_ability"), 76),
+            "stability": clamp_score(subscores_raw.get("stability"), 64),
+        },
+        "strengths": _ensure_len(
+            _to_string_list(data.get("strengths")),
+            2,
+            "強み",
+        ),
+        "risk_points": _ensure_len(
+            _to_string_list(data.get("risk_points")),
+            2,
+            "注意点",
+        ),
+        "advice": _ensure_len(
+            _to_string_list(data.get("advice")),
+            3,
+            "おすすめ",
+        ),
+        "next_action": str(
+            data.get("next_action")
+            or "結論を急がず、相手が受け取りやすい温度で一度だけ短く伝えるのがおすすめです。"
+        ),
+    }
+
+
+def build_compatibility_prompt(request: CompatibilityRequest) -> str:
+    relation_details = (
+        " / ".join([item for item in request.relation_detail_labels if item.strip()])
+        if request.relation_detail_labels
+        else "なし"
+    )
+
+    profile_context = request.profile_context or "なし"
+    recent_pattern_summary = request.recent_pattern_summary or "なし"
+    optional_note = request.optional_note or "なし"
+
+    return f"""
+あなたは恋愛・家族・友人関係の会話傾向を整理する、慎重で実務的なAI分析アシスタントです。
+役割は、相手との関係性を雑に決めつけることではなく、やり取りの傾向から「どこが噛み合いやすく、どこですれ違いやすいか」を整理することです。
+
+必ず valid JSON only で出力してください。
+JSON以外の文章は絶対に出さないでください。
+
+出力形式:
+{{
+  "score": 0-100の整数,
+  "headline": "一言の総評",
+  "subscores": {{
+    "communication": 0-100の整数,
+    "emotional_safety": 0-100の整数,
+    "repair_ability": 0-100の整数,
+    "stability": 0-100の整数
+  }},
+  "strengths": ["強み1", "強み2"],
+  "risk_points": ["注意点1", "注意点2"],
+  "advice": ["実践案1", "実践案2", "実践案3"],
+  "next_action": "次に取るべき一手"
+}}
+
+厳守ルール:
+- 占いのように断定しない
+- 「相性が悪いから無理」などの決めつけは禁止
+- 入力内容に根拠を置く
+- 強みも弱みも両方出す
+- advice は抽象論ではなく、関係改善に使える短い実践案にする
+- next_action は今日からできる一手にする
+- headline は読みたくなるが軽すぎない文にする
+
+入力:
+relation_type: {request.relation_type}
+relation_detail_labels: {relation_details}
+profile_context:
+{profile_context}
+
+recent_pattern_summary:
+{recent_pattern_summary}
+
+optional_note:
+{optional_note}
+""".strip()
 
 
 def build_consult_prompt(request: ConsultSessionRequest) -> str:
@@ -595,6 +704,35 @@ def build_consult_input(request: ConsultSessionRequest) -> List[dict[str, Any]]:
         )
 
     return [{"role": "user", "content": content}]
+
+
+@app.post("/compatibility/score")
+def compatibility_score(request: CompatibilityRequest):
+    if client is None:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY が設定されていません。",
+        )
+
+    try:
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            instructions=(
+                "You are a careful relationship compatibility analyst. "
+                "Output valid JSON only. "
+                "Be practical, kind, and grounded in the provided context."
+            ),
+            input=build_compatibility_prompt(request),
+            text={"format": {"type": "json_object"}},
+        )
+
+        result_text = response.output_text
+        result_json = parse_json_text(result_text)
+        normalized = normalize_compatibility_result(result_json)
+
+        return {"data": normalized}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI compatibility error: {e}")
 
 
 @app.post("/consult/sessions")
