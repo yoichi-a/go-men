@@ -918,22 +918,38 @@ class LocalHistoryStorage {
 
   static Future<String?> buildRecentPatternSummary(String profileId) async {
     final items = await loadItemsForProfile(profileId);
-    if (items.isEmpty) {
-      return null;
+    if (items.isEmpty) return null;
+
+    final recent = items.take(8).toList();
+    final titles = uniquePreserveOrder(
+      recent
+          .map((item) => item.title.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(),
+    );
+    final subtitles = uniquePreserveOrder(
+      recent
+          .map((item) => item.subtitle.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(),
+    );
+
+    final buffer = StringBuffer();
+    buffer.writeln('この相手に関する直近相談要約:');
+    buffer.writeln('件数: ${recent.length}件');
+    if (titles.isNotEmpty) {
+      buffer.writeln('繰り返し出やすい相談テーマ: ${titles.take(5).join(' / ')}');
+    }
+    if (subtitles.isNotEmpty) {
+      buffer.writeln('よく出る不安・論点: ${subtitles.take(5).join(' / ')}');
+    }
+    buffer.writeln('直近の相談一覧:');
+    for (final item in recent) {
+      buffer.writeln('・${item.title}: ${item.subtitle}');
     }
 
-    final recent = items.take(3).toList();
-    final lines = recent
-        .map((item) {
-          return '・${item.title} / ${item.subtitle}';
-        })
-        .join('\n');
-
-    return '''
-この相手との過去の相談傾向:
-$lines
-'''
-        .trim();
+    final summary = buffer.toString().trim();
+    return summary.isEmpty ? null : summary;
   }
 }
 
@@ -1335,68 +1351,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     profile != null ? '送る前にチェックする（プロフィール適用）' : '送る前にチェックする',
                     style: const TextStyle(fontSize: 18),
                   ),
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: () {
-                    if (!GoMenPlanStorage.isProSync) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('相性採点は Go-men Pro 限定です')),
-                      );
-                      return;
-                    }
-                    if (profile == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('相性採点にはプロフィール設定が必要です')),
-                      );
-                      return;
-                    }
-                    Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CompatibilityScreen(profile: profile),
-                          ),
-                        )
-                        .then((_) => _reloadDashboard());
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                  ),
-                  child: Text('相性を採点する（Pro）', style: TextStyle(fontSize: 18)),
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: () {
-                    if (profile == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('相性採点にはプロフィール設定が必要です')),
-                      );
-                      return;
-                    }
-
-                    if (!GoMenPlanStorage.isProSync) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ProPlanScreen(),
-                        ),
-                      );
-                      return;
-                    }
-
-                    Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CompatibilityScreen(profile: profile),
-                          ),
-                        )
-                        .then((_) => _reloadDashboard());
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                  ),
-                  child: Text('Pro限定：相性採点', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton(
@@ -4653,6 +4607,10 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         'relation_type': widget.profile.relationType,
         'relation_detail_labels': widget.profile.relationDetails,
         'profile_context': widget.profile.toProfileContext(),
+        'recent_pattern_summary':
+            await LocalHistoryStorage.buildRecentPatternSummary(
+              widget.profile.id,
+            ),
         'recent_pattern_summary': recentPatternSummary,
       }),
     );
