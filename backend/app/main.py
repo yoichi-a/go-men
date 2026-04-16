@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from typing import Any, List, Optional
 
@@ -48,6 +49,7 @@ class ConsultSessionRequest(BaseModel):
     note: Optional[str] = None
     profile_context: Optional[str] = None
     recent_pattern_summary: Optional[str] = None
+    recent_consultation_history: List[str] = Field(default_factory=list)
     screenshots_base64: List[str] = Field(default_factory=list)
     upload_ids: List[str] = Field(default_factory=list)
 
@@ -311,58 +313,111 @@ def normalize_compatibility_result(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_compatibility_prompt(request: CompatibilityRequest) -> str:
-    relation_details = " / ".join(
-        [item.strip() for item in request.relation_detail_labels if item.strip()]
-    ) or "なし"
+    relation_details = (
+        " / ".join([item.strip() for item in request.relation_detail_labels if item.strip()])
+        if request.relation_detail_labels
+        else "なし"
+    )
+    profile_context = (request.profile_context or "なし").strip()
+    recent_pattern_summary = (request.recent_pattern_summary or "なし").strip()
+    optional_note = (request.optional_note or "なし").strip()
 
-    parts = [
-        "あなたは恋愛・友人・家族関係の会話パターンを整理する、慎重で実務的な分析アシスタントです。",
-        "次の情報から、この2人の相性を100点満点で採点してください。",
-        "",
-        f"relation_type: {request.relation_type}",
-        f"relation_detail_labels: {relation_details}",
-    ]
-
-    if request.profile_context:
-        parts.extend(["", "[profile_context]", request.profile_context.strip()])
-
-    if request.recent_pattern_summary:
-        parts.extend(
-            [
-                "",
-                "[recent_consultation_history]",
-                request.recent_pattern_summary.strip(),
-            ]
-        )
-
-    if request.optional_note:
-        parts.extend(["", "[optional_note]", request.optional_note.strip()])
-
-    parts.extend(
-        [
-            "",
-            "評価ルール:",
-            "- score は 0〜100 の整数",
-            "- recent_consultation_history がある場合は、その履歴に出た繰り返しパターンを必ず評価へ反映する",
-            "- 単発の印象より、継続して起きる傾向を重く見る",
-            "- 甘すぎる点数にしないが、改善余地は next_actions に具体的に書く",
-            "- 断定しすぎず、やさしいが現実的な日本語にする",
-            "",
-            "JSON only で返すこと。",
-            "{",
-            '  "score": 78,',
-            '  "label": "相性は悪くない",',
-            '  "summary": "2〜4文の総評",',
-            '  "positive_points": ["...","...","..."],',
-            '  "risk_points": ["...","...","..."],',
-            '  "next_actions": ["...","...","..."]',
-            "}",
-        ]
+    history_items = [item.strip() for item in request.recent_consultation_history if item.strip()]
+    recent_history_block = (
+        "
+".join(f"- {item}" for item in history_items[:8]) if history_items else "なし"
     )
 
-    return "\n".join(parts)
+    return f"""あなたは、恋愛・家族・友人関係の会話傾向を分析する慎重で実務的なAIです。
+必ず valid JSON only で出力してください。JSON以外の文章は一切出さないでください。
 
+入力:
+[relation_type]
+{request.relation_type}
 
+[relation_detail_labels]
+{relation_details}
+
+[profile_context]
+{profile_context}
+
+[recent_pattern_summary]
+{recent_pattern_summary}
+
+[recent_consultation_history]
+{recent_history_block}
+
+[optional_note]
+{optional_note}
+
+評価方針:
+- 相手との相性を雑に断定せず、会話の噛み合いやすさと、すれ違いの起きやすさを実務的に整理する
+- recent_pattern_summary と recent_consultation_history に同じ問題が繰り返し出ていれば、相性スコアへ必ず反映する
+- 一時的な感情ではなく、繰り返し起きるパターンを重く見る
+- 90以上はかなり安定、75〜89は相性良好、60〜74は悪くないが注意点あり、45〜59はズレが多い、44以下はかなり不安定
+- positive_points / risk_points / next_actions は各3個、短く具体的に書く
+- next_actions は今後2週間で実行できる内容にする
+
+出力形式:
+{{
+  "score": 0,
+  "label": "...",
+  "summary": "...",
+  "positive_points": ["...", "...", "..."],
+  "risk_points": ["...", "...", "..."],
+  "next_actions": ["...", "...", "..."]
+}}"""
+
+def _compatibility_seed(request: CompatibilityRequest) -> str:
+    parts = [
+        request.relation_type.strip(),
+        " / ".join([item.strip() for item in request.relation_detail_labels if item.strip()]),
+        (request.profile_context or "").strip(),
+        (request.recent_pattern_summary or "").strip(),
+        (request.optional_note or "").strip(),
+    ]
+    parts.extend(item.strip() for item in request.recent_consultation_history[:8] if item.strip())
+    return "||".join(parts)
+
+def _compatibility_label_for_score(score: int) -> str:
+    if score >= 90:
+        return "かなり相性が良い"
+    if score >= 75:
+        return "相性は良い"
+    if score >= 60:
+        return "相性は悪くないが、すれ違いが起きやすい"
+    if score >= 45:
+        return "ズレが多く、工夫が必要"
+    return "相性は不安定で、丁寧な調整が必要"
+
+def stabilize_compatibility_result(
+    request: CompatibilityRequest,
+    raw_data: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = normalize_compatibility_result(raw_data)
+
+    seed = _compatibility_seed(request)
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    anchor_score = 56 + (int(digest[:8], 16) % 27)  # 56-82
+
+    model_score = int(normalized.get("score", anchor_score))
+    model_score = max(0, min(100, model_score))
+
+    history_count = len([item for item in request.recent_consultation_history if item.strip()])
+    repeat_penalty = 0
+    if (request.recent_pattern_summary or "").strip():
+        repeat_penalty += 2
+    if history_count >= 3:
+        repeat_penalty += 1
+    if history_count >= 6:
+        repeat_penalty += 1
+
+    stabilized_score = round(anchor_score * 0.7 + model_score * 0.3) - repeat_penalty
+    stabilized_score = max(35, min(92, stabilized_score))
+
+    normalized["score"] = stabilized_score
+    normalized["label"] = _compatibility_label_for_score(stabilized_score)
+    return normalized
 
 @app.post("/compatibility/score")
 def compatibility_score(request: CompatibilityRequest):
@@ -386,7 +441,7 @@ def compatibility_score(request: CompatibilityRequest):
 
         result_text = response.output_text
         result_json = parse_json_text(result_text)
-        normalized = normalize_compatibility_result(result_json)
+        normalized = stabilize_compatibility_result(request, result_json)
 
         return {"data": normalized}
     except Exception as e:
