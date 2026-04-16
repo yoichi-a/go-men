@@ -277,147 +277,190 @@ def build_context_block(
 def normalize_compatibility_result(data: dict[str, Any]) -> dict[str, Any]:
     def clamp_score(value: Any, fallback: int) -> int:
         try:
-            score = int(value)
+            score = int(float(value))
         except Exception:
             score = fallback
         return max(0, min(100, score))
 
-    positive_points = _to_string_list(
-        data.get("positive_points") or data.get("strengths")
+    def read_text(keys: list[str], fallback: str) -> str:
+        for key in keys:
+            value = data.get(key)
+            if value is None:
+                continue
+            text_value = str(value).strip()
+            if text_value:
+                return text_value
+        return fallback
+
+    positive_points = _ensure_len(
+        _to_string_list(
+            data.get("positive_points")
+            or data.get("strengths")
+            or data.get("good_points")
+        ),
+        3,
+        "良い点",
     )
-    risk_points = _to_string_list(data.get("risk_points"))
-    next_actions = _to_string_list(
-        data.get("next_actions") or data.get("advice")
+    risk_points = _ensure_len(
+        _to_string_list(
+            data.get("risk_points")
+            or data.get("concerns")
+            or data.get("weak_points")
+        ),
+        3,
+        "注意点",
+    )
+    next_actions = _ensure_len(
+        _to_string_list(
+            data.get("next_actions")
+            or data.get("actions")
+            or data.get("advice")
+        ),
+        3,
+        "次の一手",
     )
 
-    label = str(
-        data.get("label")
-        or data.get("headline")
-        or "相性は悪くない"
+    raw_score = clamp_score(data.get("score"), 70)
+
+    subscores_raw = data.get("subscores")
+    if not isinstance(subscores_raw, dict):
+        subscores_raw = {}
+
+    communication = clamp_score(
+        subscores_raw.get("communication"),
+        raw_score,
     )
-    summary = str(
-        data.get("summary")
-        or data.get("headline")
-        or "プロフィールと過去の相談履歴からみると、関係の土台はある一方で、すれ違い方には一定の傾向があります。"
+    emotional_safety = clamp_score(
+        subscores_raw.get("emotional_safety"),
+        max(raw_score - 6, 0),
+    )
+    repair_ability = clamp_score(
+        subscores_raw.get("repair_ability"),
+        min(raw_score + 2, 100),
+    )
+    stability = clamp_score(
+        subscores_raw.get("stability"),
+        max(raw_score - 8, 0),
+    )
+
+    weighted_score = round(
+        raw_score * 0.55
+        + communication * 0.15
+        + emotional_safety * 0.15
+        + repair_ability * 0.10
+        + stability * 0.05
+    )
+    final_score = max(38, min(92, weighted_score))
+
+    if final_score >= 82:
+        label = "かなり相性が良い"
+    elif final_score >= 72:
+        label = "相性は良い"
+    elif final_score >= 60:
+        label = "相性は悪くないが、すれ違いが起きやすい"
+    elif final_score >= 48:
+        label = "相性はあるが、関係維持には工夫が必要"
+    else:
+        label = "土台から整え直した方がよい"
+
+    summary = read_text(
+        ["summary", "headline", "overall_comment"],
+        "関係の土台はありますが、会話の進め方や不安の扱い方に一定のパターンがあります。特に繰り返すすれ違いがある場合は、内容そのものより先に伝え方と安心感の整え方を見直すと安定しやすいです。",
     )
 
     return {
-        "score": clamp_score(data.get("score"), 78),
+        "score": final_score,
         "label": label,
         "summary": summary,
-        "positive_points": _ensure_len(positive_points, 3, "良い点"),
-        "risk_points": _ensure_len(risk_points, 3, "注意点"),
-        "next_actions": _ensure_len(next_actions, 3, "次の一手"),
+        "positive_points": positive_points,
+        "risk_points": risk_points,
+        "next_actions": next_actions,
+        "subscores": {
+            "communication": communication,
+            "emotional_safety": emotional_safety,
+            "repair_ability": repair_ability,
+            "stability": stability,
+        },
     }
 
 
-
 def build_compatibility_prompt(request: CompatibilityRequest) -> str:
-    relation_details = (
-        " / ".join([item.strip() for item in request.relation_detail_labels if item.strip()])
-        if request.relation_detail_labels
-        else "なし"
-    )
-    profile_context = (request.profile_context or "なし").strip()
-    recent_pattern_summary = (request.recent_pattern_summary or "なし").strip()
-    optional_note = (request.optional_note or "なし").strip()
+    relation_map = {
+        "couple": "恋人・パートナー",
+        "friend": "友人",
+        "family": "家族",
+        "family_parent_child": "家族 / 親子",
+        "parent_child": "家族 / 親子",
+        "family_sibling": "家族 / 兄弟姉妹",
+        "family_inlaw": "家族 / 義家族",
+        "family_other": "家族 / その他",
+        "other": "その他",
+    }
 
-    history_items = [item.strip() for item in request.recent_consultation_history if item.strip()]
-    recent_history_block = (
-        "
-".join(f"- {item}" for item in history_items[:8]) if history_items else "なし"
-    )
+    relation_label = relation_map.get(request.relation_type, request.relation_type)
 
-    return f"""あなたは、恋愛・家族・友人関係の会話傾向を分析する慎重で実務的なAIです。
-必ず valid JSON only で出力してください。JSON以外の文章は一切出さないでください。
-
-入力:
-[relation_type]
-{request.relation_type}
-
-[relation_detail_labels]
-{relation_details}
-
-[profile_context]
-{profile_context}
-
-[recent_pattern_summary]
-{recent_pattern_summary}
-
-[recent_consultation_history]
-{recent_history_block}
-
-[optional_note]
-{optional_note}
-
-評価方針:
-- 相手との相性を雑に断定せず、会話の噛み合いやすさと、すれ違いの起きやすさを実務的に整理する
-- recent_pattern_summary と recent_consultation_history に同じ問題が繰り返し出ていれば、相性スコアへ必ず反映する
-- 一時的な感情ではなく、繰り返し起きるパターンを重く見る
-- 90以上はかなり安定、75〜89は相性良好、60〜74は悪くないが注意点あり、45〜59はズレが多い、44以下はかなり不安定
-- positive_points / risk_points / next_actions は各3個、短く具体的に書く
-- next_actions は今後2週間で実行できる内容にする
-
-出力形式:
-{{
-  "score": 0,
-  "label": "...",
-  "summary": "...",
-  "positive_points": ["...", "...", "..."],
-  "risk_points": ["...", "...", "..."],
-  "next_actions": ["...", "...", "..."]
-}}"""
-
-def _compatibility_seed(request: CompatibilityRequest) -> str:
-    parts = [
-        request.relation_type.strip(),
-        " / ".join([item.strip() for item in request.relation_detail_labels if item.strip()]),
-        (request.profile_context or "").strip(),
-        (request.recent_pattern_summary or "").strip(),
-        (request.optional_note or "").strip(),
+    parts: list[str] = [
+        "あなたは男女関係・友人関係・家族関係のコミュニケーション分析に強い、日本語の関係性評価AIです。",
+        "以下の情報をもとに、この関係の相性を現実的に採点してください。",
+        "甘くしすぎず、脅しすぎず、繰り返し出ているパターンを最優先で評価してください。",
+        "[relation_type]
+" + relation_label,
     ]
-    parts.extend(item.strip() for item in request.recent_consultation_history[:8] if item.strip())
-    return "||".join(parts)
 
-def _compatibility_label_for_score(score: int) -> str:
-    if score >= 90:
-        return "かなり相性が良い"
-    if score >= 75:
-        return "相性は良い"
-    if score >= 60:
-        return "相性は悪くないが、すれ違いが起きやすい"
-    if score >= 45:
-        return "ズレが多く、工夫が必要"
-    return "相性は不安定で、丁寧な調整が必要"
+    if request.relation_detail_labels:
+        labels = [label.strip() for label in request.relation_detail_labels if label.strip()]
+        if labels:
+            parts.append("[relation_detail_labels]
+" + "
+".join(labels))
 
-def stabilize_compatibility_result(
-    request: CompatibilityRequest,
-    raw_data: dict[str, Any],
-) -> dict[str, Any]:
-    normalized = normalize_compatibility_result(raw_data)
+    if request.profile_context and request.profile_context.strip():
+        parts.append("[profile_context]
+" + request.profile_context.strip())
 
-    seed = _compatibility_seed(request)
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
-    anchor_score = 56 + (int(digest[:8], 16) % 27)  # 56-82
+    if request.recent_pattern_summary and request.recent_pattern_summary.strip():
+        parts.append("[recent_consultation_history]
+" + request.recent_pattern_summary.strip())
 
-    model_score = int(normalized.get("score", anchor_score))
-    model_score = max(0, min(100, model_score))
+    if request.optional_note and request.optional_note.strip():
+        parts.append("[optional_note]
+" + request.optional_note.strip())
 
-    history_count = len([item for item in request.recent_consultation_history if item.strip()])
-    repeat_penalty = 0
-    if (request.recent_pattern_summary or "").strip():
-        repeat_penalty += 2
-    if history_count >= 3:
-        repeat_penalty += 1
-    if history_count >= 6:
-        repeat_penalty += 1
+    parts.append(
+        "
+".join(
+            [
+                "必須ルール:",
+                "- recent_consultation_history がある場合は、その履歴に出た反復パターンを必ず score / summary / risk_points / next_actions に反映する",
+                "- その場の雰囲気より、繰り返される衝突パターンを重く見る",
+                "- score は 0-100 の整数",
+                "- subscores も 0-100 の整数",
+                "- positive_points / risk_points / next_actions はそれぞれ必ず3個",
+                "- risk_points は抽象論ではなく、この関係で起きやすいすれ違いを書く",
+                "- next_actions は今後7日以内に実行できる具体策にする",
+                "- 出力は JSON のみ。前置きや説明文は禁止",
+                "{",
+                '  "score": 0,',
+                '  "label": "...",',
+                '  "summary": "...",',
+                '  "positive_points": ["...", "...", "..."],',
+                '  "risk_points": ["...", "...", "..."],',
+                '  "next_actions": ["...", "...", "..."],',
+                '  "subscores": {',
+                '    "communication": 0,',
+                '    "emotional_safety": 0,',
+                '    "repair_ability": 0,',
+                '    "stability": 0',
+                "  }",
+                "}",
+            ]
+        )
+    )
 
-    stabilized_score = round(anchor_score * 0.7 + model_score * 0.3) - repeat_penalty
-    stabilized_score = max(35, min(92, stabilized_score))
+    return "
 
-    normalized["score"] = stabilized_score
-    normalized["label"] = _compatibility_label_for_score(stabilized_score)
-    return normalized
+".join(parts)
+
 
 @app.post("/compatibility/score")
 def compatibility_score(request: CompatibilityRequest):
