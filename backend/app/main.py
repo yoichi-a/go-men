@@ -453,6 +453,75 @@ def build_compatibility_prompt(request: CompatibilityRequest) -> str:
     return "\n\n".join(parts)
 
 
+
+
+def stabilize_compatibility_score(
+    request: CompatibilityRequest,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    score = int(result.get("score", 78))
+    score = max(0, min(100, score))
+
+    recent = (request.recent_pattern_summary or "").strip()
+    note = (request.optional_note or "").strip()
+    profile = (request.profile_context or "").strip()
+
+    text_blob = "\n".join([recent, note, profile]).lower()
+
+    risk_hits = 0
+    for keyword in [
+        "不安",
+        "傷つ",
+        "冷た",
+        "強い言い方",
+        "返信が遅い",
+        "すれ違",
+        "謝る前に正論",
+        "衝突",
+        "喧嘩",
+    ]:
+        if keyword.lower() in text_blob:
+            risk_hits += 1
+
+    positive_hits = 0
+    for keyword in [
+        "信頼",
+        "安心",
+        "落ち着",
+        "率直",
+        "優しい",
+        "思いやり",
+        "尊重",
+    ]:
+        if keyword.lower() in text_blob:
+            positive_hits += 1
+
+    score = score - min(risk_hits * 3, 12) + min(positive_hits * 2, 6)
+    score = max(0, min(100, score))
+
+    if score >= 85:
+        label = "かなり相性が良い"
+    elif score >= 70:
+        label = "相性は良い"
+    elif score >= 55:
+        label = "相性は悪くない"
+    elif score >= 40:
+        label = "調整次第で十分うまくいく"
+    else:
+        label = "丁寧なすり合わせが必要"
+
+    result["score"] = score
+    result["label"] = label
+
+    summary = str(result.get("summary") or "").strip()
+    if recent:
+        extra = "過去の相談履歴では、繰り返し起きるすれ違いパターンも評価に反映しています。"
+        if extra not in summary:
+            result["summary"] = (summary + " " + extra).strip() if summary else extra
+
+    return result
+
+
 @app.post("/compatibility/score")
 def compatibility_score(request: CompatibilityRequest):
     if client is None:
