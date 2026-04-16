@@ -833,32 +833,151 @@ class DailyUsageStorage {
 }
 
 class ProfileStorage {
-  static const _key = 'go_men_relationship_profile';
+  static const _legacyKey = 'go_men_relationship_profile';
+  static const _listKey = 'go_men_relationship_profiles';
+  static const _activeIdKey = 'go_men_active_profile_id';
 
-  static Future<RelationshipProfile?> loadProfile() async {
+  static Future<List<RelationshipProfile>> loadProfiles() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final raw = prefs.getString(_listKey);
 
-    if (raw == null || raw.isEmpty) {
-      return null;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        final profiles = decoded
+            .map(
+              (item) =>
+                  RelationshipProfile.fromMap(item as Map<String, dynamic>),
+            )
+            .toList();
+
+        if (profiles.isNotEmpty) {
+          await _normalizeActiveProfileId(prefs, profiles);
+        }
+        return profiles;
+      } catch (_) {}
+    }
+
+    final legacyRaw = prefs.getString(_legacyKey);
+    if (legacyRaw == null || legacyRaw.isEmpty) {
+      return [];
     }
 
     try {
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      return RelationshipProfile.fromMap(decoded);
+      final decoded = jsonDecode(legacyRaw) as Map<String, dynamic>;
+      final profile = RelationshipProfile.fromMap(decoded);
+      final profiles = [profile];
+
+      await prefs.setString(
+        _listKey,
+        jsonEncode(profiles.map((e) => e.toMap()).toList()),
+      );
+      await prefs.setString(_activeIdKey, profile.id);
+
+      return profiles;
     } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _normalizeActiveProfileId(
+    SharedPreferences prefs,
+    List<RelationshipProfile> profiles,
+  ) async {
+    final activeId = prefs.getString(_activeIdKey);
+    final resolvedId = profiles.any((item) => item.id == activeId)
+        ? activeId
+        : profiles.first.id;
+
+    if (resolvedId != null) {
+      await prefs.setString(_activeIdKey, resolvedId);
+    }
+  }
+
+  static Future<String?> loadActiveProfileId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_activeIdKey);
+  }
+
+  static Future<void> setActiveProfileId(String? profileId) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (profileId == null || profileId.isEmpty) {
+      await prefs.remove(_activeIdKey);
+      return;
+    }
+
+    await prefs.setString(_activeIdKey, profileId);
+  }
+
+  static Future<RelationshipProfile?> loadProfile() async {
+    final profiles = await loadProfiles();
+    if (profiles.isEmpty) {
       return null;
+    }
+
+    final activeId = await loadActiveProfileId();
+    for (final profile in profiles) {
+      if (profile.id == activeId) {
+        return profile;
+      }
+    }
+
+    return profiles.first;
+  }
+
+  static Future<void> saveProfiles(List<RelationshipProfile> profiles) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(
+      _listKey,
+      jsonEncode(profiles.map((e) => e.toMap()).toList()),
+    );
+
+    if (profiles.isEmpty) {
+      await prefs.remove(_activeIdKey);
+    } else {
+      await _normalizeActiveProfileId(prefs, profiles);
     }
   }
 
   static Future<void> saveProfile(RelationshipProfile profile) async {
+    final profiles = await loadProfiles();
+    final index = profiles.indexWhere((item) => item.id == profile.id);
+
+    if (index >= 0) {
+      profiles[index] = profile;
+    } else {
+      profiles.insert(0, profile);
+    }
+
+    await saveProfiles(profiles);
+    await setActiveProfileId(profile.id);
+  }
+
+  static Future<void> deleteProfile(String profileId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(profile.toMap()));
+    final profiles = await loadProfiles();
+    profiles.removeWhere((item) => item.id == profileId);
+
+    await prefs.setString(
+      _listKey,
+      jsonEncode(profiles.map((e) => e.toMap()).toList()),
+    );
+
+    final activeId = prefs.getString(_activeIdKey);
+    if (profiles.isEmpty) {
+      await prefs.remove(_activeIdKey);
+    } else if (activeId == profileId) {
+      await prefs.setString(_activeIdKey, profiles.first.id);
+    }
   }
 
   static Future<void> clearProfile() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+    await prefs.remove(_legacyKey);
+    await prefs.remove(_listKey);
+    await prefs.remove(_activeIdKey);
   }
 }
 
@@ -1001,6 +1120,144 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _dashboardFuture = _loadDashboard();
     });
+  }
+
+  Future<RelationshipProfile?> _pickProfileForAction({
+    required String title,
+    required List<RelationshipProfile> profiles,
+  }) async {
+    return showModalBottomSheet<RelationshipProfile>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...profiles.map(
+                (item) => Card(
+                  child: ListTile(
+                    title: Text(item.displayName),
+                    subtitle: Text(item.relationSummaryLabel),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).pop(item),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openConsultFlow(RelationshipProfile? activeProfile) async {
+    final profiles = await ProfileStorage.loadProfiles();
+
+    if (!mounted) return;
+
+    if (profiles.isEmpty) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const RelationTypeScreen()))
+          .then((_) => _reloadDashboard());
+      return;
+    }
+
+    final orderedProfiles = [...profiles];
+    if (activeProfile != null) {
+      orderedProfiles.sort((a, b) {
+        if (a.id == activeProfile.id) return -1;
+        if (b.id == activeProfile.id) return 1;
+        return 0;
+      });
+    }
+
+    RelationshipProfile? selected;
+    if (orderedProfiles.length == 1) {
+      selected = orderedProfiles.first;
+    } else {
+      selected = await _pickProfileForAction(
+        title: '相談する相手を選んでください',
+        profiles: orderedProfiles,
+      );
+    }
+
+    if (selected == null || !mounted) return;
+
+    await ProfileStorage.setActiveProfileId(selected.id);
+    final picked = selected;
+
+    if (!mounted) return;
+
+    await Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => ThemeSelectionScreen(
+              draft: ConsultationDraft(
+                relationType: picked.relationType,
+                relationLabel: picked.relationSummaryLabel,
+                selectedProfile: picked,
+              ),
+            ),
+          ),
+        )
+        .then((_) => _reloadDashboard());
+  }
+
+  Future<void> _openPrecheckFlow(RelationshipProfile? activeProfile) async {
+    final profiles = await ProfileStorage.loadProfiles();
+
+    if (!mounted) return;
+
+    if (profiles.isEmpty) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const PrecheckInputScreen()))
+          .then((_) => _reloadDashboard());
+      return;
+    }
+
+    final orderedProfiles = [...profiles];
+    if (activeProfile != null) {
+      orderedProfiles.sort((a, b) {
+        if (a.id == activeProfile.id) return -1;
+        if (b.id == activeProfile.id) return 1;
+        return 0;
+      });
+    }
+
+    RelationshipProfile? selected;
+    if (orderedProfiles.length == 1) {
+      selected = orderedProfiles.first;
+    } else {
+      selected = await _pickProfileForAction(
+        title: 'チェックしたい相手を選んでください',
+        profiles: orderedProfiles,
+      );
+    }
+
+    if (selected == null || !mounted) return;
+
+    await ProfileStorage.setActiveProfileId(selected.id);
+    final picked = selected;
+
+    if (!mounted) return;
+
+    await Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => PrecheckInputScreen(initialProfile: picked),
+          ),
+        )
+        .then((_) => _reloadDashboard());
   }
 
   void _showProfileDetail(RelationshipProfile profile) {
@@ -1299,31 +1556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 20),
                 ],
                 ElevatedButton(
-                  onPressed: () {
-                    if (profile != null) {
-                      Navigator.of(context)
-                          .push(
-                            MaterialPageRoute(
-                              builder: (_) => ThemeSelectionScreen(
-                                draft: ConsultationDraft(
-                                  relationType: profile.relationType,
-                                  relationLabel: profile.relationSummaryLabel,
-                                  selectedProfile: profile,
-                                ),
-                              ),
-                            ),
-                          )
-                          .then((_) => _reloadDashboard());
-                    } else {
-                      Navigator.of(context)
-                          .push(
-                            MaterialPageRoute(
-                              builder: (_) => const RelationTypeScreen(),
-                            ),
-                          )
-                          .then((_) => _reloadDashboard());
-                    }
-                  },
+                  onPressed: () => _openConsultFlow(profile),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
@@ -1334,16 +1567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                PrecheckInputScreen(initialProfile: profile),
-                          ),
-                        )
-                        .then((_) => _reloadDashboard());
-                  },
+                  onPressed: () => _openPrecheckFlow(profile),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
@@ -1374,7 +1598,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.of(context)
                         .push(
                           MaterialPageRoute(
-                            builder: (_) => ProfileEditScreen(profile: profile),
+                            builder: (_) => const ProfileManagerScreen(),
                           ),
                         )
                         .then((_) => _reloadDashboard());
@@ -1382,9 +1606,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
-                  child: Text(
-                    profile != null ? '関係性プロフィールを編集する' : '関係性プロフィールを設定する',
-                    style: const TextStyle(fontSize: 18),
+                  child: const Text(
+                    '関係性プロフィールを選択・編集する',
+                    style: TextStyle(fontSize: 18),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -1589,12 +1813,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     }
 
     if (widget.profile == null) {
-      final existingProfile = await ProfileStorage.loadProfile();
-      if (existingProfile != null) {
+      final existingProfiles = await ProfileStorage.loadProfiles();
+      final plan = await GoMenPlanStorage.loadPlan();
+      final maxProfiles = PlanLimits.profilesForPlan(plan);
+
+      if (existingProfiles.length >= maxProfiles) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('無料版ではプロフィールは1件までです。既存プロフィールを編集してください')),
-        );
+        final message = plan == GoMenPlan.pro
+            ? 'プロフィールの上限に達しています。不要なプロフィールを整理してください。'
+            : '無料版ではプロフィールは1件までです。Go-men Pro で複数プロフィールを保存できます。';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
         return;
       }
     }
@@ -4778,6 +5008,234 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class ProfileManagerScreen extends StatefulWidget {
+  const ProfileManagerScreen({super.key});
+
+  @override
+  State<ProfileManagerScreen> createState() => _ProfileManagerScreenState();
+}
+
+class _ProfileManagerScreenState extends State<ProfileManagerScreen> {
+  bool _loading = true;
+  List<RelationshipProfile> _profiles = const [];
+  String? _activeProfileId;
+  GoMenPlan _plan = GoMenPlan.free;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final profiles = await ProfileStorage.loadProfiles();
+    final activeProfileId = await ProfileStorage.loadActiveProfileId();
+    final plan = await GoMenPlanStorage.loadPlan();
+
+    if (!mounted) return;
+    setState(() {
+      _profiles = profiles;
+      _activeProfileId = activeProfileId;
+      _plan = plan;
+      _loading = false;
+    });
+  }
+
+  Future<void> _setActive(RelationshipProfile profile) async {
+    await ProfileStorage.setActiveProfileId(profile.id);
+    await _reload();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${profile.displayName} を使用中にしました')));
+  }
+
+  Future<void> _openEditor([RelationshipProfile? profile]) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProfileEditScreen(profile: profile)),
+    );
+    await _reload();
+  }
+
+  Future<void> _delete(RelationshipProfile profile) async {
+    final shouldDelete =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('プロフィールを削除しますか？'),
+              content: Text('${profile.displayName} のプロフィールを削除します。'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('キャンセル'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('削除する'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
+    if (!shouldDelete) return;
+
+    await ProfileStorage.deleteProfile(profile.id);
+    await _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxProfiles = PlanLimits.profilesForPlan(_plan);
+    final canAddMore = _profiles.length < maxProfiles;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('関係性プロフィール')),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _plan == GoMenPlan.pro ? 'Go-men Pro' : '無料版',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('プロフィール数: ${_profiles.length} / $maxProfiles'),
+                          const SizedBox(height: 6),
+                          Text(
+                            _plan == GoMenPlan.pro
+                                ? '複数プロフィールを保存でき、相談前に相手を選べます。'
+                                : '無料版では1件までです。Go-men Pro で複数プロフィールを使えます。',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_profiles.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('まだプロフィールはありません。まず1件作成してください。'),
+                      ),
+                    ),
+                  ..._profiles.map(
+                    (profile) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      profile.displayName,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  if (profile.id == _activeProfileId)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '使用中',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(profile.relationSummaryLabel),
+                              if (profile.notes.trim().isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  profile.notes.trim(),
+                                  style: TextStyle(
+                                    color: goMenMutedTextColor(context),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton.tonal(
+                                    onPressed: () => _setActive(profile),
+                                    child: const Text('この相手を使う'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () => _openEditor(profile),
+                                    child: const Text('編集'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () => _delete(profile),
+                                    child: const Text('削除'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: canAddMore
+                        ? () => _openEditor()
+                        : () {
+                            final message = _plan == GoMenPlan.pro
+                                ? 'これ以上プロフィールを増やせません。不要なプロフィールを整理してください。'
+                                : '無料版ではプロフィールは1件までです。Go-men Pro で複数プロフィールを使えます。';
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text(message)));
+                          },
+                    child: Text(canAddMore ? 'プロフィールを追加する' : 'プロフィール上限に達しています'),
+                  ),
+                ],
+              ),
       ),
     );
   }
