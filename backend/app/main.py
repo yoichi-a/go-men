@@ -403,32 +403,25 @@ def build_compatibility_prompt(request: CompatibilityRequest) -> str:
         "あなたは男女関係・友人関係・家族関係のコミュニケーション分析に強い、日本語の関係性評価AIです。",
         "以下の情報をもとに、この関係の相性を現実的に採点してください。",
         "甘くしすぎず、脅しすぎず、繰り返し出ているパターンを最優先で評価してください。",
-        "[relation_type]
-" + relation_label,
+        "[relation_type]\n" + relation_label,
     ]
 
     if request.relation_detail_labels:
         labels = [label.strip() for label in request.relation_detail_labels if label.strip()]
         if labels:
-            parts.append("[relation_detail_labels]
-" + "
-".join(labels))
+            parts.append("[relation_detail_labels]\n" + "\n".join(labels))
 
     if request.profile_context and request.profile_context.strip():
-        parts.append("[profile_context]
-" + request.profile_context.strip())
+        parts.append("[profile_context]\n" + request.profile_context.strip())
 
     if request.recent_pattern_summary and request.recent_pattern_summary.strip():
-        parts.append("[recent_consultation_history]
-" + request.recent_pattern_summary.strip())
+        parts.append("[recent_consultation_history]\n" + request.recent_pattern_summary.strip())
 
     if request.optional_note and request.optional_note.strip():
-        parts.append("[optional_note]
-" + request.optional_note.strip())
+        parts.append("[optional_note]\n" + request.optional_note.strip())
 
     parts.append(
-        "
-".join(
+        "\n".join(
             [
                 "必須ルール:",
                 "- recent_consultation_history がある場合は、その履歴に出た反復パターンを必ず score / summary / risk_points / next_actions に反映する",
@@ -457,9 +450,7 @@ def build_compatibility_prompt(request: CompatibilityRequest) -> str:
         )
     )
 
-    return "
-
-".join(parts)
+    return "\n\n".join(parts)
 
 
 @app.post("/compatibility/score")
@@ -484,7 +475,7 @@ def compatibility_score(request: CompatibilityRequest):
 
         result_text = response.output_text
         result_json = parse_json_text(result_text)
-        normalized = stabilize_compatibility_result(request, result_json)
+        normalized = stabilize_compatibility_score(request, normalize_compatibility_result(result_json))
 
         return {"data": normalized}
     except Exception as e:
