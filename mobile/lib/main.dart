@@ -4837,10 +4837,6 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         'relation_type': widget.profile.relationType,
         'relation_detail_labels': widget.profile.relationDetails,
         'profile_context': widget.profile.toProfileContext(),
-        'recent_pattern_summary':
-            await LocalHistoryStorage.buildRecentPatternSummary(
-              widget.profile.id,
-            ),
         'recent_pattern_summary': recentPatternSummary,
       }),
     );
