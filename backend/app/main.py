@@ -360,8 +360,7 @@ def build_compatibility_prompt(request: CompatibilityRequest) -> str:
         ]
     )
 
-    return "
-".join(parts)
+    return "\n".join(parts)
 
 
 
