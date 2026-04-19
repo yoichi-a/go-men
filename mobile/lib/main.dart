@@ -1230,14 +1230,27 @@ class SavedResultItem {
   }
 }
 
+List<RelationshipProfile> _profilesAvailableForCurrentPlan(
+  List<RelationshipProfile> profiles,
+) {
+  final maxProfiles = PlanLimits.profilesForPlan(
+    GoMenPlanStorage.notifier.value,
+  );
+  if (maxProfiles <= 0) return const <RelationshipProfile>[];
+  if (profiles.length <= maxProfiles) return profiles;
+  return profiles.take(maxProfiles).toList();
+}
+
 class HomeDashboardData {
   const HomeDashboardData({
     required this.profile,
+    required this.profiles,
     required this.profileItems,
     required this.allItems,
   });
 
   final RelationshipProfile? profile;
+  final List<RelationshipProfile> profiles;
   final List<SavedResultItem> profileItems;
   final List<SavedResultItem> allItems;
 }
@@ -1579,6 +1592,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<HomeDashboardData> _loadDashboard() async {
     final profile = await ProfileStorage.loadProfile();
+    final profiles = await ProfileStorage.loadProfiles();
     final allItems = await LocalHistoryStorage.loadItems();
     final profileItems = profile == null
         ? <SavedResultItem>[]
@@ -1586,6 +1600,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return HomeDashboardData(
       profile: profile,
+      profiles: profiles,
       profileItems: profileItems,
       allItems: allItems,
     );
@@ -1603,6 +1618,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String noneLabel,
     required String noneSubtitle,
   }) async {
+    final availableProfiles = _profilesAvailableForCurrentPlan(profiles);
     return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -1626,7 +1642,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                ...profiles.map(
+                ...availableProfiles.map(
                   (profile) => ListTile(
                     title: Text(profile.displayName),
                     subtitle: buildProfileTypeSummaryWidget(profile),
@@ -1851,6 +1867,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 snapshot.data ??
                 const HomeDashboardData(
                   profile: null,
+                  profiles: [],
                   profileItems: [],
                   allItems: [],
                 );
@@ -1859,7 +1876,12 @@ class _HomeScreenState extends State<HomeScreen> {
             final allItems = data.allItems;
             final savedCount = allItems.length;
             final saveProgress = savedCount / LocalHistoryStorage.maxItems;
-            final profileProgress = profile == null ? 0.0 : 1.0;
+            final currentPlan = GoMenPlanStorage.notifier.value;
+            final profileCount = data.profiles.length;
+            final maxProfiles = PlanLimits.profilesForPlan(currentPlan);
+            final profileProgress = maxProfiles <= 0
+                ? 0.0
+                : profileCount / maxProfiles;
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -1933,12 +1955,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 6),
                         LinearProgressIndicator(
-                          value: profileProgress,
+                          value: profileProgress.clamp(0.0, 1.0),
                           minHeight: 8,
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${profile == null ? 0 : 1} / ${PlanLimits.freeProfiles} 件',
+                          '$profileCount / $maxProfiles 件',
                           style: const TextStyle(color: Colors.black54),
                         ),
                         const SizedBox(height: 12),
