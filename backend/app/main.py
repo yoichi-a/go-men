@@ -616,7 +616,15 @@ def create_consult_session(request: ConsultSessionRequest):
             instructions=(
                 "You are a careful relationship mediation assistant. ""Output valid JSON only. ""Prioritize concrete, copy-ready Japanese replies over generic advice. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, recent patterns, and readable screenshot cues when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
             ),
-            input=build_consult_input(request),
+            input=[
+                {
+                    "role": "user",
+                    "content": (
+                        build_consult_input(request)
+                        + "\n\nReturn valid json only."
+                    ),
+                }
+            ],
             text={"format": {"type": "json_object"}},
         )
 
@@ -643,7 +651,15 @@ def precheck_message(request: PrecheckRequest):
             instructions=(
                 "You are a careful message precheck assistant. ""Output valid JSON only. ""Prioritize one best softened message and two concrete alternatives. ""Keep the best message concise, usable, and natural. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, and recent patterns when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to soften tone, choose pacing, and improve emotional safety when consistent with the actual case."
             ),
-            input=build_precheck_prompt(request),
+            input=[
+                {
+                    "role": "user",
+                    "content": (
+                        build_precheck_prompt(request)
+                        + "\n\nReturn valid json only."
+                    ),
+                }
+            ],
             text={"format": {"type": "json_object"}},
         )
 
