@@ -525,6 +525,56 @@ def stabilize_compatibility_score(
     return result
 
 
+def _request_to_prompt_lines(request, heading: str) -> str:
+    if hasattr(request, "model_dump"):
+        data = request.model_dump()
+    elif hasattr(request, "dict"):
+        data = request.dict()
+    else:
+        data = vars(request)
+
+    lines = [heading]
+
+    for key, value in data.items():
+        if value is None:
+            continue
+
+        if isinstance(value, list):
+            cleaned = []
+            for item in value:
+                s = str(item).strip()
+                if s:
+                    cleaned.append(s)
+            if cleaned:
+                lines.append(f"{key}:")
+                lines.extend([f"- {item}" for item in cleaned])
+            continue
+
+        if isinstance(value, dict):
+            if value:
+                lines.append(f"{key}: {value}")
+            continue
+
+        s = str(value).strip()
+        if s:
+            lines.append(f"{key}: {s}")
+
+    return "\n".join(lines)
+
+
+def build_consult_input(request) -> str:
+    return _request_to_prompt_lines(
+        request,
+        "以下は相談内容です。状況整理・相手視点・今送るべきか・送るなら自然な返信案を検討してください。",
+    )
+
+
+def build_precheck_prompt(request) -> str:
+    return _request_to_prompt_lines(
+        request,
+        "以下は送信前チェック依頼です。きつさ・誤解リスク・改善案を検討してください。",
+    )
+
 @app.post("/compatibility/score")
 def compatibility_score(request: CompatibilityRequest):
     if client is None:
