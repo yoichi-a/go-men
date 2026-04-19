@@ -5,11 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'go_men_billing_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GoMenPlanStorage.ensureLoaded();
   await GoMenThemeStorage.ensureLoaded();
+  if (!GoMenPlanStorage.isProSync &&
+      GoMenThemeStorage.notifier.value == GoMenThemeMode.gold) {}
   runApp(const GoMenApp());
 }
 
@@ -199,25 +202,14 @@ GoMenThemeSpec goMenThemeSpecFor(GoMenThemeMode mode) {
         mode: GoMenThemeMode.gold,
         label: 'Gold',
         isPremium: true,
-        backgroundTop: Color(0xFF161311),
-        backgroundBottom: Color(0xFF26201B),
-        cardColor: Color(0xFF221C17),
-        accentColor: Color(0xFFD6A84A),
-        previewTextColor: Colors.white,
-        description: '落ち着いた高級感のあるプレミアムテーマ',
+        backgroundTop: Color(0xFFFFF3CC),
+        backgroundBottom: Color(0xFFE7C86A),
+        cardColor: Color(0xFFFFFBF0),
+        accentColor: Color(0xFFB8860B),
+        previewTextColor: Color(0xFF4A3510),
+        description: '見やすさを保ったプレミアムゴールドテーマ',
       );
-    case GoMenThemeMode.pink:
-      return const GoMenThemeSpec(
-        mode: GoMenThemeMode.pink,
-        label: 'Pink',
-        isPremium: true,
-        backgroundTop: Color(0xFFFFF2F7),
-        backgroundBottom: Color(0xFFFFE0EC),
-        cardColor: Colors.white,
-        accentColor: Color(0xFFE75480),
-        previewTextColor: Color(0xFF7A274A),
-        description: '恋愛相談に寄せたやわらかいプレミアムテーマ',
-      );
+
     case GoMenThemeMode.ivory:
       return const GoMenThemeSpec(
         mode: GoMenThemeMode.ivory,
@@ -230,11 +222,24 @@ GoMenThemeSpec goMenThemeSpecFor(GoMenThemeMode mode) {
         previewTextColor: Color(0xFF5E4A34),
         description: 'Go-men の標準テーマ。やさしく上品な印象',
       );
+
+    case GoMenThemeMode.pink:
+      return const GoMenThemeSpec(
+        mode: GoMenThemeMode.pink,
+        label: 'Pink',
+        isPremium: true,
+        backgroundTop: Color(0xFFFFF2F7),
+        backgroundBottom: Color(0xFFFFE0EC),
+        cardColor: Colors.white,
+        accentColor: Color(0xFFE75480),
+        previewTextColor: Color(0xFF7A274A),
+        description: '恋愛相談に寄せたやわらかいプレミアムテーマ',
+      );
   }
 }
 
 ThemeData buildGoMenTheme(GoMenThemeSpec spec) {
-  final isDark = spec.mode == GoMenThemeMode.gold;
+  final isDark = false;
 
   return ThemeData(
     colorScheme: ColorScheme.fromSeed(
@@ -285,11 +290,10 @@ class GoMenThemeStorage {
   }
 
   static Future<void> setTheme(GoMenThemeMode mode) async {
-    final safeMode = canUse(mode) ? mode : GoMenThemeMode.ivory;
-    notifier.value = safeMode;
-
+    final nextMode = canUse(mode) ? mode : GoMenThemeMode.ivory;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, safeMode.name);
+    await prefs.setString(_key, nextMode.name);
+    notifier.value = nextMode;
   }
 }
 
@@ -327,7 +331,7 @@ class _AppViewport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spec = goMenThemeSpecFor(GoMenThemeStorage.notifier.value);
-    final isDark = spec.mode == GoMenThemeMode.gold;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1576,6 +1580,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontSize: 18),
                   ),
                 ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () {
+                    final selectedProfile = profile;
+
+                    if (selectedProfile == null) {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProfileManagerScreen(),
+                            ),
+                          )
+                          .then((_) => _reloadDashboard());
+                      return;
+                    }
+
+                    Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CompatibilityScreen(profile: selectedProfile),
+                          ),
+                        )
+                        .then((_) => _reloadDashboard());
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: Text(
+                    profile != null ? '相性を採点する' : 'プロフィールを設定して相性を採点',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SizedBox(height: 16),
                 OutlinedButton(
                   onPressed: () {
@@ -4824,34 +4862,124 @@ class CompatibilityScreen extends StatefulWidget {
 }
 
 class _CompatibilityScreenState extends State<CompatibilityScreen> {
-  late final Future<CompatibilityScoreResult> _future = _fetch();
+  final TextEditingController _noteController = TextEditingController();
 
-  Future<CompatibilityScoreResult> _fetch() async {
-    final recentPatternSummary =
-        await LocalHistoryStorage.buildRecentPatternSummary(widget.profile.id);
+  bool _isLoading = false;
+  String? _errorText;
+  CompatibilityScoreResult? _result;
 
-    final response = await http.post(
-      Uri.parse('https://go-men.onrender.com/compatibility/score'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'relation_type': widget.profile.relationType,
-        'relation_detail_labels': widget.profile.relationDetails,
-        'profile_context': widget.profile.toProfileContext(),
-        'recent_pattern_summary': recentPatternSummary,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('APIエラー: ${response.statusCode}\n${response.body}');
-    }
-
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    return CompatibilityScoreResult.fromJson(decoded);
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
   }
 
-  Widget _section(BuildContext context, String title, List<String> items) {
-    if (items.isEmpty) return const SizedBox.shrink();
+  Future<void> _runCompatibilityScore() async {
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
 
+    try {
+      final recentPatternSummary =
+          await LocalHistoryStorage.buildRecentPatternSummary(
+            widget.profile.id,
+          );
+
+      final response = await http.post(
+        Uri.parse('https://go-men.onrender.com/compatibility/score'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'relation_type': widget.profile.relationType,
+          'relation_detail_labels': widget.profile.relationDetails,
+          'profile_context': widget.profile.toProfileContext(),
+          'recent_pattern_summary': recentPatternSummary,
+          'optional_note': _noteController.text.trim().isEmpty
+              ? null
+              : _noteController.text.trim(),
+        }),
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        String detail = '相性採点の取得に失敗しました';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic> && decoded['detail'] != null) {
+            detail = decoded['detail'].toString();
+          }
+        } catch (_) {}
+        throw Exception(detail);
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('レスポンス形式が不正です');
+      }
+
+      final result = CompatibilityScoreResult.fromJson(decoded);
+
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = '相性採点に失敗しました。\n$e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildBulletList(List<String> items, IconData icon) {
+    if (items.isEmpty) {
+      return Text(
+        'まだ結果がありません',
+        style: TextStyle(color: goMenMutedTextColor(context)),
+      );
+    }
+
+    return Column(
+      children: items
+          .map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(icon, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        height: 1.45,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _section(
+    BuildContext context,
+    String title,
+    List<String> items,
+    IconData icon,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -4861,24 +4989,13 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
             Text(
               title,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 10),
-            ...items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  '・$item',
-                  style: TextStyle(
-                    height: 1.5,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ),
+            const SizedBox(height: 12),
+            _buildBulletList(items, icon),
           ],
         ),
       ),
@@ -4887,123 +5004,216 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final result = _result;
+
     return Scaffold(
       appBar: AppBar(title: const Text('相性採点')),
-      body: FutureBuilder<CompatibilityScoreResult>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  '相性採点の取得に失敗しました。\n\n${snapshot.error}',
-                  textAlign: TextAlign.center,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (!GoMenPlanStorage.isProSync) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '相性採点は Go-men Pro 限定です。\n'
+                        'Pro にすると、プロフィールと保存履歴を反映した相性スコアを利用できます。',
+                        style: TextStyle(
+                          height: 1.6,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProPlanScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text('Proプランを見る'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            );
-          }
-
-          final result = snapshot.data!;
-          final scoreColor = result.score >= 80
-              ? Colors.green.shade700
-              : result.score >= 60
-              ? Colors.orange.shade700
-              : Theme.of(context).colorScheme.error;
-
-          return SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Text(
-                          widget.profile.displayName,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: goMenMutedTextColor(context),
-                          ),
+              const SizedBox(height: 16),
+            ],
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '対象プロフィール',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: goMenMutedTextColor(context),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.profile.displayName,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.profile.relationSummaryLabel,
+                      style: TextStyle(color: goMenMutedTextColor(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '任意メモ',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '最近の雰囲気や気になることを補足すると、採点の精度が少し上がります。',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: goMenMutedTextColor(context),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _noteController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        hintText: '最近のすれ違い、気になっていること、うまくいっていない点など',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: (!GoMenPlanStorage.isProSync || _isLoading)
+                            ? null
+                            : _runCompatibilityScore,
+                        child: Text(
+                          _isLoading
+                              ? '採点中...'
+                              : (result == null
+                                    ? '相性を採点する（Pro限定）'
+                                    : 'もう一度採点する'),
                         ),
-                        const SizedBox(height: 16),
-                        Container(
-                          width: 118,
-                          height: 118,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: scoreColor, width: 3),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${result.score}',
-                                style: TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w800,
-                                  color: scoreColor,
-                                ),
-                              ),
-                              Text(
-                                ' / 100',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: goMenMutedTextColor(context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          result.label,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          result.summary,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.6,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    _errorText!,
+                    style: TextStyle(
+                      height: 1.55,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                _section(context, 'うまくいきやすい点', result.positivePoints),
-                const SizedBox(height: 12),
-                _section(context, 'すれ違いやすい点', result.riskPoints),
-                const SizedBox(height: 12),
-                _section(context, '次に意識すること', result.nextActions),
-                const SizedBox(height: 16),
-                Text(
-                  'このスコアは関係を断定するものではなく、コミュニケーション調整の参考用です。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: goMenMutedTextColor(context),
+              ),
+            ],
+            if (result != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Text(
+                        '相性スコア',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: goMenMutedTextColor(context),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${result.score}点',
+                        style: TextStyle(
+                          fontSize: 46,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        result.label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        result.summary,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          height: 1.55,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          );
-        },
+              ),
+              const SizedBox(height: 16),
+              _section(
+                context,
+                'うまくいきやすい点',
+                result.positivePoints,
+                Icons.favorite_border,
+              ),
+              const SizedBox(height: 12),
+              _section(
+                context,
+                'すれ違いやすい点',
+                result.riskPoints,
+                Icons.warning_amber_rounded,
+              ),
+              const SizedBox(height: 12),
+              _section(
+                context,
+                '次に意識すること',
+                result.nextActions,
+                Icons.flag_outlined,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -5237,152 +5447,232 @@ class _ProfileManagerScreenState extends State<ProfileManagerScreen> {
   }
 }
 
-class ProPlanScreen extends StatelessWidget {
+class ProPlanScreen extends StatefulWidget {
   const ProPlanScreen({super.key});
+
+  @override
+  State<ProPlanScreen> createState() => _ProPlanScreenState();
+}
+
+class _ProPlanScreenState extends State<ProPlanScreen> {
+  late final GoMenBillingService _billing;
+
+  @override
+  void initState() {
+    super.initState();
+    _billing = GoMenBillingService(
+      onEntitlementChanged: (isPro) async {
+        await GoMenPlanStorage.setPlan(isPro ? GoMenPlan.pro : GoMenPlan.free);
+        if (!mounted) return;
+        setState(() {});
+      },
+    );
+    _billing.init();
+  }
+
+  @override
+  void dispose() {
+    _billing.dispose();
+    super.dispose();
+  }
 
   Widget _featureRow(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('・'),
           const SizedBox(width: 6),
-          Expanded(child: Text(text, style: const TextStyle(height: 1.45))),
-        ],
-      ),
-    );
-  }
-
-  Widget _planCard({
-    required String title,
-    required String subtitle,
-    required List<String> items,
-    bool highlighted = false,
-  }) {
-    return Card(
-      child: Container(
-        decoration: highlighted
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(width: 1.4),
-              )
-            : null,
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 15, height: 1.45),
             ),
-            const SizedBox(height: 8),
-            Text(subtitle, style: const TextStyle(height: 1.55)),
-            const SizedBox(height: 14),
-            for (final item in items) _featureRow(item),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final plan = GoMenPlanStorage.notifier.value;
-    final isPro = plan == GoMenPlan.pro;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Go-men Pro')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: ValueListenableBuilder<GoMenPlan>(
+          valueListenable: GoMenPlanStorage.notifier,
+          builder: (context, plan, _) {
+            final isPro = plan == GoMenPlan.pro;
+
+            return AnimatedBuilder(
+              animation: _billing,
+              builder: (context, _) {
+                final product = _billing.product;
+
+                return ListView(
+                  padding: const EdgeInsets.all(20),
                   children: [
-                    Text(
-                      isPro ? '現在のプラン: Go-men Pro' : '現在のプラン: 無料版',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Text(
+                              isPro
+                                  ? '現在 Go-men Pro を利用中です'
+                                  : 'Go-men Pro にアップグレード',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              isPro
+                                  ? '購入状態はアプリ内で反映済みです。復元や再取得もこの画面から実行できます。'
+                                  : '本物の App Store 購入導線をここから使います。',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 15,
+                                height: 1.6,
+                                color: goMenMutedTextColor(context),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      isPro
-                          ? 'Go-men Pro では、保存件数・プロフィール件数・テーマの自由度を広げ、今後の相性診断や深い関係性分析にもつなげていきます。'
-                          : 'まずは無料版で価値を体験し、もっと深く使いたい人向けに Go-men Pro を用意する設計です。',
-                      style: const TextStyle(height: 1.6),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Go-men Pro でできること',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            _featureRow('相性採点（100点満点）'),
+                            _featureRow('複数プロフィール'),
+                            _featureRow('保存件数の拡張 / 実質無制限'),
+                            _featureRow('相手ごとの履歴整理'),
+                            _featureRow('いつものすれ違いパターン分析'),
+                            _featureRow('深い文脈反映'),
+                            _featureRow('Gold / Pink テーマ'),
+                          ],
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _planCard(
-              title: '無料版',
-              subtitle: 'まずは基本機能をシンプルに使うプランです。',
-              items: [
-                '相談 / 送信前チェック: 1日3回まで',
-                'プロフィール保存: ${PlanLimits.freeProfiles}件まで',
-                '保存結果: 直近${PlanLimits.freeSavedResults}件まで',
-                'テーマ: Ivory',
-              ],
-            ),
-            const SizedBox(height: 16),
-            _planCard(
-              title: 'Go-men Pro',
-              subtitle: '履歴・関係性・見た目まで、より深く使い込みたい人向けです。',
-              highlighted: true,
-              items: const [
-                '相談 / 送信前チェック: 回数制限なし想定',
-                'プロフィール保存: 制限なし',
-                '保存結果: 制限なし',
-                'テーマ: Ivory / Gold / Pink',
-                '相性診断（今後の会話履歴活用）',
-                '過去の傾向を踏まえた深い提案',
-              ],
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '現在のプラン: ${PlanLimits.labelForPlan(plan)}',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            if (product != null) ...[
+                              Text(
+                                '商品: ${product.title}',
+                                style: const TextStyle(fontSize: 15),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '価格: ${product.price}',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: goMenMutedTextColor(context),
+                                ),
+                              ),
+                            ] else ...[
+                              Text(
+                                '商品情報を読み込み中です。',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: goMenMutedTextColor(context),
+                                ),
+                              ),
+                            ],
+                            if (_billing.errorText != null) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                _billing.errorText!,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.red,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            ElevatedButton(
+                              onPressed:
+                                  (isPro ||
+                                      _billing.isPurchasePending ||
+                                      product == null)
+                                  ? null
+                                  : () {
+                                      _billing.buyPro();
+                                    },
+                              child: Text(
+                                isPro
+                                    ? 'Pro有効化済み'
+                                    : _billing.isPurchasePending
+                                    ? '購入処理中...'
+                                    : 'App StoreでProを購入',
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton(
+                              onPressed: _billing.isPurchasePending
+                                  ? null
+                                  : () {
+                                      _billing.restore();
+                                    },
+                              child: const Text('購入を復元'),
+                            ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: _billing.isPurchasePending
+                                  ? null
+                                  : () {
+                                      _billing.reload();
+                                    },
+                              child: const Text('商品情報を再取得'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     Text(
-                      'これから接続するもの',
+                      '※ 現段階では購入成功時にアプリ内の Pro 状態を反映します。次の段階で server 側の購入検証をつなぎます。',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        height: 1.6,
+                        color: goMenMutedTextColor(context),
                       ),
                     ),
-                    SizedBox(height: 12),
-                    Text('・App Store サブスク課金'),
-                    SizedBox(height: 6),
-                    Text('・相性診断の本実装'),
-                    SizedBox(height: 6),
-                    Text('・テーマ切り替えの演出強化'),
-                    SizedBox(height: 6),
-                    Text('・音声仲介モード'),
                   ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Text(
-                  '※ 現在のプラン切り替えは開発確認用です。実際の課金購入はまだ未接続です。',
-                  style: TextStyle(height: 1.6),
-                ),
-              ),
-            ),
-          ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
