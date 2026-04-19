@@ -425,6 +425,9 @@ def build_compatibility_prompt(request: CompatibilityRequest) -> str:
             [
                 "必須ルール:",
                 "- recent_consultation_history がある場合は、その履歴に出た反復パターンを必ず score / summary / risk_points / next_actions に反映する",
+                "- profile_context に通常16タイプ / 恋愛16タイプ / 短い傾向がある場合は、コミュニケーション傾向の仮説として参照する",
+                "- ただしタイプだけで断定しない。relation_detail_labels / recent_consultation_history / optional_note と矛盾する場合は実際の文脈を優先する",
+                "- type情報は、安心感の作り方・言葉の強さ・返答速度・修復の仕方の調整に使う",
                 "- その場の雰囲気より、繰り返される衝突パターンを重く見る",
                 "- score は 0-100 の整数",
                 "- subscores も 0-100 の整数",
@@ -534,9 +537,7 @@ def compatibility_score(request: CompatibilityRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful relationship compatibility analyst. "
-                "Output valid JSON only. "
-                "Be practical, kind, and grounded in the provided context."
+                "You are a careful relationship compatibility analyst. ""Output valid JSON only. ""Be practical, kind, and grounded in the provided context. ""Use profile_context 16-type labels and short tendency notes as soft hints only; never stereotype or over-attribute. ""Prioritize actual relationship details, repeated patterns, and the user\'s described situation when they conflict."
             ),
             input=build_compatibility_prompt(request),
             text={"format": {"type": "json_object"}},
@@ -563,11 +564,7 @@ def create_consult_session(request: ConsultSessionRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful relationship mediation assistant. "
-                "Output valid JSON only. "
-                "Prioritize concrete, copy-ready Japanese replies over generic advice. "
-                "Avoid repetitive template-like wording across different cases. "
-                "Use relation details, profile context, recent patterns, and readable screenshot cues when available."
+                "You are a careful relationship mediation assistant. ""Output valid JSON only. ""Prioritize concrete, copy-ready Japanese replies over generic advice. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, recent patterns, and readable screenshot cues when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
             ),
             input=build_consult_input(request),
             text={"format": {"type": "json_object"}},
@@ -594,12 +591,7 @@ def precheck_message(request: PrecheckRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful message precheck assistant. "
-                "Output valid JSON only. "
-                "Prioritize one best softened message and two concrete alternatives. "
-                "Keep the best message concise, usable, and natural. "
-                "Avoid repetitive template-like wording across different cases. "
-                "Use relation details, profile context, and recent patterns when available."
+                "You are a careful message precheck assistant. ""Output valid JSON only. ""Prioritize one best softened message and two concrete alternatives. ""Keep the best message concise, usable, and natural. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, and recent patterns when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to soften tone, choose pacing, and improve emotional safety when consistent with the actual case."
             ),
             input=build_precheck_prompt(request),
             text={"format": {"type": "json_object"}},
