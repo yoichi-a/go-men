@@ -229,6 +229,14 @@ def normalize_precheck_result(data: dict[str, Any]) -> dict[str, Any]:
         "相手には強く聞こえる点",
     )
 
+    heard_as = _to_string_list(data.get("heard_as_interpretations"))
+    if not heard_as:
+        heard_as = risk_points[:]
+    heard_as = heard_as[:2]
+
+    avoid_phrases = _to_string_list(data.get("avoid_phrases"))
+    avoid_phrases = avoid_phrases[:2]
+
     return {
         "precheck_id": str(data.get("precheck_id", "precheck_generated")),
         "safety_flag": bool(data.get("safety_flag", False)),
@@ -243,36 +251,12 @@ def normalize_precheck_result(data: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "risk_points": risk_points,
+        "heard_as_interpretations": heard_as,
+        "avoid_phrases": avoid_phrases,
         "softened_message": softened_message,
         "revised_message_options": revised,
         "suggest_consult_mode": bool(data.get("suggest_consult_mode", True)),
     }
-
-
-def build_context_block(
-    *,
-    note: Optional[str] = None,
-    profile_context: Optional[str] = None,
-    recent_pattern_summary: Optional[str] = None,
-    optional_context_text: Optional[str] = None,
-) -> str:
-    sections: List[str] = []
-
-    if profile_context and profile_context.strip():
-        sections.append(f"【相手プロフィール】\n{profile_context.strip()}")
-
-    if recent_pattern_summary and recent_pattern_summary.strip():
-        sections.append(f"【過去相談から見える傾向】\n{recent_pattern_summary.strip()}")
-
-    if note and note.strip():
-        sections.append(f"【今回の補足】\n{note.strip()}")
-
-    if optional_context_text and optional_context_text.strip():
-        sections.append(f"【今回の補足】\n{optional_context_text.strip()}")
-
-    return "\n\n".join(sections).strip()
-
-
 
 def normalize_compatibility_result(data: dict[str, Any]) -> dict[str, Any]:
     def clamp_score(value: Any, fallback: int) -> int:
@@ -572,7 +556,7 @@ def build_consult_input(request) -> str:
 def build_precheck_prompt(request) -> str:
     return _request_to_prompt_lines(
         request,
-        "以下は送信前チェック依頼です。json形式で、きつさ・誤解リスク・改善案を返してください。",
+        "以下は送信前チェック依頼です。json形式で、is_safe_to_send・risk_points・heard_as_interpretations・avoid_phrases・softened_message・revised_message_options・suggest_consult_mode を返してください。",
     )
 
 @app.post("/compatibility/score")
@@ -614,7 +598,7 @@ def create_consult_session(request: ConsultSessionRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful relationship mediation assistant. ""Output valid JSON only. ""Prioritize concrete, copy-ready Japanese replies over generic advice. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, recent patterns, and readable screenshot cues when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
+                "You are a careful relationship mediation assistant. ""Output valid JSON only. ""Always return these JSON keys: summary, partner_feeling_estimate, send_timing, send_timing_reason, best_reply, other_replies, heard_as_interpretations, avoid_phrases. ""Include heard_as_interpretations and avoid_phrases as arrays with exactly 2 natural Japanese strings each. ""Prioritize concrete, copy-ready Japanese replies over generic advice. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, recent patterns, and readable screenshot cues when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
             ),
             input=[
                 {
@@ -649,7 +633,7 @@ def precheck_message(request: PrecheckRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful message precheck assistant. ""Output valid JSON only. ""Prioritize one best softened message and two concrete alternatives. ""Keep the best message concise, usable, and natural. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, and recent patterns when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to soften tone, choose pacing, and improve emotional safety when consistent with the actual case."
+                "You are a careful message precheck assistant. ""Output valid JSON only. ""Prioritize one best softened message and two concrete alternatives. Always return these JSON keys: is_safe_to_send, risk_points, heard_as_interpretations, avoid_phrases, softened_message, revised_message_options, suggest_consult_mode. ""Include heard_as_interpretations and avoid_phrases in the JSON. ""Keep the best message concise, usable, and natural. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, and recent patterns when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to soften tone, choose pacing, and improve emotional safety when consistent with the actual case."
             ),
             input=[
                 {

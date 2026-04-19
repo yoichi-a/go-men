@@ -452,6 +452,36 @@ List<String> uniquePreserveOrder(List<String> items) {
   return result;
 }
 
+String _typeLabelFromOptions(String typeKey, List<TypeOption> options) {
+  final normalized = typeKey.trim();
+  for (final option in options) {
+    if (option.key == normalized) {
+      return option.label;
+    }
+  }
+  return '不明 / 無回答';
+}
+
+List<String> activeProfileTypeLines(RelationshipProfile profile) {
+  final selfParts = <String>[
+    _typeLabelFromOptions(profile.selfStandardTypeId, standard16TypeOptions),
+  ];
+  final partnerParts = <String>[
+    _typeLabelFromOptions(profile.partnerStandardTypeId, standard16TypeOptions),
+  ];
+
+  if (profile.relationType == 'couple') {
+    selfParts.add(
+      _typeLabelFromOptions(profile.selfLoveTypeId, love16TypeOptions),
+    );
+    partnerParts.add(
+      _typeLabelFromOptions(profile.partnerLoveTypeId, love16TypeOptions),
+    );
+  }
+
+  return ['自分：${selfParts.join('、')}', '相手：${partnerParts.join('、')}'];
+}
+
 String buildTrendHeadline(List<SavedResultItem> items) {
   if (items.isEmpty) {
     return 'まだこの相手との相談履歴はありません。';
@@ -572,12 +602,10 @@ GoMenThemeSpec goMenThemeSpecFor(GoMenThemeMode mode) {
 }
 
 ThemeData buildGoMenTheme(GoMenThemeSpec spec) {
-  final isDark = false;
-
   return ThemeData(
     colorScheme: ColorScheme.fromSeed(
       seedColor: spec.accentColor,
-      brightness: isDark ? Brightness.dark : Brightness.light,
+      brightness: Brightness.light,
     ),
     useMaterial3: true,
     scaffoldBackgroundColor: spec.backgroundBottom,
@@ -588,14 +616,14 @@ ThemeData buildGoMenTheme(GoMenThemeSpec spec) {
       surfaceTintColor: Colors.transparent,
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: spec.cardColor.withValues(alpha: isDark ? 0.90 : 0.78),
-      foregroundColor: isDark ? Colors.white : Colors.black87,
+      backgroundColor: spec.cardColor.withValues(alpha: 0.78),
+      foregroundColor: Colors.black87,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: isDark ? const Color(0xFF2E2925) : Colors.black87,
+      backgroundColor: Colors.black87,
       contentTextStyle: const TextStyle(color: Colors.white),
     ),
   );
@@ -1089,8 +1117,12 @@ class ConsultationResult {
       situationSummary: data['situation_summary'] as String,
       partnerFeelingEstimate: data['partner_feeling_estimate'] as String,
       heardAsInterpretations:
-          (data['heard_as_interpretations'] as List<dynamic>).cast<String>(),
-      avoidPhrases: (data['avoid_phrases'] as List<dynamic>).cast<String>(),
+          ((data['heard_as_interpretations'] as List?) ?? const [])
+              .whereType<String>()
+              .toList(),
+      avoidPhrases: ((data['avoid_phrases'] as List?) ?? const [])
+          .whereType<String>()
+          .toList(),
       replyOptions: replyOptionsRaw
           .map(
             (item) => ReplyOption(
@@ -1111,6 +1143,8 @@ class PrecheckResult {
     required this.label,
     required this.reason,
     required this.riskPoints,
+    required this.heardAsInterpretations,
+    required this.avoidPhrases,
     required this.softenedMessage,
     required this.revisedMessageOptions,
     required this.suggestConsultMode,
@@ -1119,6 +1153,8 @@ class PrecheckResult {
   final String label;
   final String reason;
   final List<String> riskPoints;
+  final List<String> heardAsInterpretations;
+  final List<String> avoidPhrases;
   final String softenedMessage;
   final List<String> revisedMessageOptions;
   final bool suggestConsultMode;
@@ -1131,6 +1167,13 @@ class PrecheckResult {
       label: safeToSend['label'] as String,
       reason: safeToSend['reason'] as String,
       riskPoints: (data['risk_points'] as List<dynamic>).cast<String>(),
+      heardAsInterpretations:
+          ((data['heard_as_interpretations'] as List?) ?? const [])
+              .whereType<String>()
+              .toList(),
+      avoidPhrases: ((data['avoid_phrases'] as List?) ?? const [])
+          .whereType<String>()
+          .toList(),
       softenedMessage: data['softened_message'] as String,
       revisedMessageOptions: (data['revised_message_options'] as List<dynamic>)
           .cast<String>(),
@@ -1212,7 +1255,8 @@ class SavedResultsViewData {
 class DailyUsageStatus {
   const DailyUsageStatus({required this.dateKey, required this.usedCount});
 
-  static const dailyLimit = PlanLimits.freeDailyUses;
+  int get dailyLimit =>
+      GoMenPlanStorage.isProSync ? 999999 : PlanLimits.freeDailyUses;
 
   final String dateKey;
   final int usedCount;
@@ -1553,38 +1597,51 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<RelationshipProfile?> _pickProfileForAction({
+  Future<String?> _pickProfileIdOrNone({
     required String title,
     required List<RelationshipProfile> profiles,
+    required String noneLabel,
+    required String noneSubtitle,
   }) async {
-    return showModalBottomSheet<RelationshipProfile>(
+    return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...profiles.map(
-                (item) => Card(
-                  child: ListTile(
-                    title: Text(item.displayName),
-                    subtitle: Text(item.relationSummaryLabel),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).pop(item),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.72,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-            ],
+                ...profiles.map(
+                  (profile) => ListTile(
+                    title: Text(profile.displayName),
+                    subtitle: buildProfileTypeSummaryWidget(profile),
+                    onTap: () => Navigator.of(context).pop(profile.id),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.person_off_outlined),
+                  title: Text(noneLabel),
+                  subtitle: Text(noneSubtitle),
+                  onTap: () => Navigator.of(context).pop('__without_profile__'),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -1612,20 +1669,27 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    RelationshipProfile? selected;
-    if (orderedProfiles.length == 1) {
-      selected = orderedProfiles.first;
-    } else {
-      selected = await _pickProfileForAction(
-        title: '相談する相手を選んでください',
-        profiles: orderedProfiles,
-      );
+    final choiceId = await _pickProfileIdOrNone(
+      title: '相談する相手を選んでください',
+      profiles: orderedProfiles,
+      noneLabel: 'プロフィールなしで相談する',
+      noneSubtitle: '関係性をその場で入力して進みます',
+    );
+
+    if (!mounted || choiceId == null) return;
+
+    if (choiceId == '__without_profile__') {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const RelationTypeScreen()))
+          .then((_) => _reloadDashboard());
+      return;
     }
 
-    if (selected == null || !mounted) return;
+    final picked = orderedProfiles.firstWhere(
+      (profile) => profile.id == choiceId,
+    );
 
-    await ProfileStorage.setActiveProfileId(selected.id);
-    final picked = selected;
+    await ProfileStorage.setActiveProfileId(picked.id);
 
     if (!mounted) return;
 
@@ -1636,6 +1700,7 @@ class _HomeScreenState extends State<HomeScreen> {
               draft: ConsultationDraft(
                 relationType: picked.relationType,
                 relationLabel: picked.relationSummaryLabel,
+                relationDetails: List<String>.from(picked.relationDetails),
                 selectedProfile: picked,
               ),
             ),
@@ -1665,20 +1730,27 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    RelationshipProfile? selected;
-    if (orderedProfiles.length == 1) {
-      selected = orderedProfiles.first;
-    } else {
-      selected = await _pickProfileForAction(
-        title: 'チェックしたい相手を選んでください',
-        profiles: orderedProfiles,
-      );
+    final choiceId = await _pickProfileIdOrNone(
+      title: 'チェックしたい相手を選んでください',
+      profiles: orderedProfiles,
+      noneLabel: 'プロフィールなしでチェックする',
+      noneSubtitle: '関係性をその場で入力して進みます',
+    );
+
+    if (!mounted || choiceId == null) return;
+
+    if (choiceId == '__without_profile__') {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const PrecheckInputScreen()))
+          .then((_) => _reloadDashboard());
+      return;
     }
 
-    if (selected == null || !mounted) return;
+    final picked = orderedProfiles.firstWhere(
+      (profile) => profile.id == choiceId,
+    );
 
-    await ProfileStorage.setActiveProfileId(selected.id);
-    final picked = selected;
+    await ProfileStorage.setActiveProfileId(picked.id);
 
     if (!mounted) return;
 
@@ -1905,17 +1977,18 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(profile.relationSummaryLabel),
-                          const SizedBox(height: 10),
-                          Text(
-                            '傷つきやすい: ${profile.sensitiveTo.isEmpty ? '未設定' : profile.sensitiveTo}',
-                            style: const TextStyle(color: Colors.black54),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '通りやすい: ${profile.worksWellWith.isEmpty ? '未設定' : profile.worksWellWith}',
-                            style: const TextStyle(color: Colors.black54),
+                          const SizedBox(height: 8),
+                          ...activeProfileTypeLines(profile).map(
+                            (line) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                line,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Row(
@@ -2226,6 +2299,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late String _selfStandardTypeId;
   late String _selfLoveTypeId;
   late String _partnerStandardTypeId;
+  late Set<String> _selectedRelationDetails;
   late String _partnerLoveTypeId;
 
   bool get _isCouple => _relationType == 'couple';
@@ -2262,6 +2336,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _selfLoveTypeId = (profile?.selfLoveTypeId ?? 'unknown').trim();
     _partnerStandardTypeId = (profile?.partnerStandardTypeId ?? 'unknown')
         .trim();
+    _selectedRelationDetails = _parseRelationDetails(
+      _relationDetailsController.text,
+    ).toSet();
     _partnerLoveTypeId = (profile?.partnerLoveTypeId ?? 'unknown').trim();
   }
 
@@ -2295,6 +2372,84 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       }
     }
     return 'unknown';
+  }
+
+  Set<String> _availableRelationDetailOptionSet() {
+    return _profileRelationDetailGroupsFor(_relationType)
+        .expand((group) => group.options)
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  void _syncRelationDetailsControllerPreservingFreeText() {
+    final allowed = _availableRelationDetailOptionSet();
+    final manual = _parseRelationDetails(
+      _relationDetailsController.text,
+    ).where((item) => !allowed.contains(item)).toList();
+    _relationDetailsController.text = [
+      ..._selectedRelationDetails,
+      ...manual,
+    ].join('\n');
+  }
+
+  Widget _buildRelationDetailSelector() {
+    final groups = _profileRelationDetailGroupsFor(_relationType);
+    if (groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('関係性の詳細', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ...groups.map(
+              (group) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.title,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: group.options.map((option) {
+                        final selected = _selectedRelationDetails.contains(
+                          option,
+                        );
+                        return FilterChip(
+                          label: Text(option),
+                          selected: selected,
+                          onSelected: (value) {
+                            setState(() {
+                              if (value) {
+                                _selectedRelationDetails.add(option);
+                              } else {
+                                _selectedRelationDetails.remove(option);
+                              }
+                              _syncRelationDetailsControllerPreservingFreeText();
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildTypeDropdownCard({
@@ -2402,10 +2557,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final relationOptions = const <MapEntry<String, String>>[
       MapEntry('couple', '恋人・パートナー'),
       MapEntry('friend', '友人'),
-      MapEntry('family_parent_child', '家族 / 親子'),
-      MapEntry('family_sibling', '家族 / 兄弟姉妹'),
-      MapEntry('family_inlaw', '家族 / 義家族'),
-      MapEntry('family_other', '家族 / その他'),
+      MapEntry('family', '家族'),
       MapEntry('other', 'その他'),
     ];
 
@@ -2461,17 +2613,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _relationDetailsController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: '関係の詳細（任意）',
-                  hintText: '例: 学校の友人 / 職場の同僚 / 兄弟姉妹\n改行・読点区切りで複数入力できます',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
+              _buildRelationDetailSelector(),
               const SizedBox(height: 16),
               const Text(
                 '相手の傾向メモ',
@@ -3378,51 +3520,60 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
   }
 
   Future<void> _pickScreenshot() async {
-    if (_isPicking) return;
+    final maxCount = GoMenPlanStorage.isProSync ? 10 : 2;
+    final remaining = maxCount - _pickedScreenshots.length;
+
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('スクショは最大$maxCount枚までです')));
+      return;
+    }
 
     setState(() {
       _isPicking = true;
     });
 
     try {
-      final file = await _picker.pickImage(
-        source: ImageSource.gallery,
+      final files = await _picker.pickMultiImage(
         imageQuality: 85,
-        maxWidth: 1440,
+        maxWidth: 1600,
       );
 
-      if (file == null) {
-        return;
+      if (files.isEmpty) return;
+
+      final existingKeys = _pickedScreenshots
+          .map((e) => '${e.name}_${e.bytes.length}')
+          .toSet();
+
+      final additions = <_PickedScreenshot>[];
+      for (final file in files) {
+        if (additions.length >= remaining) break;
+
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+
+        final name = file.name.trim().isEmpty
+            ? 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png'
+            : file.name.trim();
+        final key = '${name}_${bytes.length}';
+        if (existingKeys.contains(key)) continue;
+
+        existingKeys.add(key);
+        additions.add(_PickedScreenshot(name: name, bytes: bytes));
       }
 
-      final bytes = await file.readAsBytes();
-
-      if (bytes.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('画像を読み込めませんでした')));
-        return;
-      }
-
-      final fileName = file.name.trim().isEmpty
-          ? 'screenshot_\${DateTime.now().millisecondsSinceEpoch}.png'
-          : file.name.trim();
-
-      if (!mounted) return;
+      if (!mounted || additions.isEmpty) return;
 
       setState(() {
-        _pickedScreenshots.add(_PickedScreenshot(name: fileName, bytes: bytes));
+        _pickedScreenshots.addAll(additions);
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('スクリーンショットを追加しました')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('スクリーンショットを追加できませんでした: $e')));
+      if (files.length > additions.length) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('最大$maxCount枚まで追加できます')));
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -3571,6 +3722,8 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
               ],
               TextField(
                 controller: _chatController,
+                maxLength: 400,
+                inputFormatters: [LengthLimitingTextInputFormatter(400)],
                 maxLines: 10,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
@@ -3732,7 +3885,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
     }
 
     try {
-      final uri = Uri.parse('https://go-men.onrender.com/consult/sessions');
+      final uri = Uri.parse('http://127.0.0.1:8000/consult/sessions');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
@@ -4117,7 +4270,9 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
         widget.initialDraft?.relationLabel ??
         widget.initialProfile?.relationLabel;
     _relationDetails = List<String>.from(
-      widget.initialDraft?.relationDetails ?? const <String>[],
+      (widget.initialDraft?.relationDetails.isNotEmpty ?? false)
+          ? widget.initialDraft!.relationDetails
+          : (widget.initialProfile?.relationDetails ?? const <String>[]),
     );
   }
 
@@ -4285,7 +4440,7 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(profile.relationSummaryLabel),
+                      buildProfileTypeSummaryWidget(profile),
                     ],
                   ),
                 ),
@@ -4351,6 +4506,8 @@ class _PrecheckInputScreenState extends State<PrecheckInputScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _contextController,
+              maxLength: 400,
+              inputFormatters: [LengthLimitingTextInputFormatter(400)],
               maxLines: 4,
               decoration: const InputDecoration(
                 labelText: '補足',
@@ -4412,7 +4569,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
     }
 
     try {
-      final uri = Uri.parse('https://go-men.onrender.com/precheck');
+      final uri = Uri.parse('http://127.0.0.1:8000/precheck');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
@@ -4717,10 +4874,40 @@ class PrecheckResultScreen extends StatelessWidget {
                 ),
               ),
             _ResultCard(
-              title: 'こう聞こえるかも',
+              title: '今のままだと誤解されやすい点',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: result.riskPoints
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('・$item'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ResultCard(
+              title: '相手にどう聞こえるか',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.heardAsInterpretations
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text('・$item'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ResultCard(
+              title: '今は避けたい言い方',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.avoidPhrases
                     .map(
                       (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -5296,6 +5483,32 @@ class TermsAndDisclaimerScreen extends StatelessWidget {
   }
 }
 
+Widget buildProfileTypeSummaryWidget(RelationshipProfile profile) {
+  final lines = activeProfileTypeLines(profile);
+  if (lines.isEmpty) {
+    return Text(
+      profile.relationSummaryLabel,
+      style: const TextStyle(height: 1.4),
+    );
+  }
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        profile.relationSummaryLabel,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 4),
+      ...lines.map(
+        (line) =>
+            Text(line, style: const TextStyle(fontSize: 12, height: 1.35)),
+      ),
+    ],
+  );
+}
+
 class CompatibilityScoreResult {
   const CompatibilityScoreResult({
     required this.score,
@@ -5349,6 +5562,31 @@ class CompatibilityScreen extends StatefulWidget {
 }
 
 class _CompatibilityScreenState extends State<CompatibilityScreen> {
+  Widget buildProfileTypeSummaryWidget(RelationshipProfile profile) {
+    final lines = activeProfileTypeLines(profile);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        buildProfileTypeSummaryWidget(profile),
+        if (lines.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                line,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   final TextEditingController _noteController = TextEditingController();
 
   bool _isLoading = false;
@@ -5374,7 +5612,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
           );
 
       final response = await http.post(
-        Uri.parse('https://go-men.onrender.com/compatibility/score'),
+        Uri.parse('http://127.0.0.1:8000/compatibility/score'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'relation_type': widget.profile.relationType,
@@ -5878,7 +6116,7 @@ class _ProfileManagerScreenState extends State<ProfileManagerScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(profile.relationSummaryLabel),
+                              buildProfileTypeSummaryWidget(profile),
                               if (profile.notes.trim().isNotEmpty) ...[
                                 const SizedBox(height: 6),
                                 Text(
