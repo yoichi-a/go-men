@@ -55,6 +55,339 @@ String extractConsultTheme(String title) {
 
 enum GoMenPlan { free, pro }
 
+// === go-men personality types start ===
+class TypeOption {
+  final String key;
+  final String label;
+  final String aiHint;
+
+  const TypeOption({
+    required this.key,
+    required this.label,
+    required this.aiHint,
+  });
+}
+
+const String unknownTypeKey = 'UNKNOWN';
+
+const TypeOption unknownTypeOption = TypeOption(
+  key: unknownTypeKey,
+  label: '不明 / 無回答',
+  aiHint: '',
+);
+
+const List<TypeOption> standard16TypeOptions = [
+  TypeOption(key: 'INTJ', label: 'INTJ（戦略家）', aiHint: '長期目線・構造化・結論重視'),
+  TypeOption(key: 'INTP', label: 'INTP（探究家）', aiHint: '分析好き・仮説思考・距離感重視'),
+  TypeOption(key: 'ENTJ', label: 'ENTJ（指揮官）', aiHint: '主導力・決断力・効率重視'),
+  TypeOption(key: 'ENTP', label: 'ENTP（発明家）', aiHint: '柔軟・議論好き・刺激志向'),
+  TypeOption(key: 'INFJ', label: 'INFJ（提唱者）', aiHint: '洞察・理想志向・深い共感'),
+  TypeOption(key: 'INFP', label: 'INFP（仲介者）', aiHint: '価値観重視・繊細・内省的'),
+  TypeOption(key: 'ENFJ', label: 'ENFJ（主人公）', aiHint: '対人配慮・巻き込み力・温かさ'),
+  TypeOption(key: 'ENFP', label: 'ENFP（運動家）', aiHint: '感情表現豊か・好奇心・自由さ'),
+  TypeOption(key: 'ISTJ', label: 'ISTJ（管理者）', aiHint: '誠実・安定志向・責任感'),
+  TypeOption(key: 'ISFJ', label: 'ISFJ（擁護者）', aiHint: '気配り・献身性・慎重さ'),
+  TypeOption(key: 'ESTJ', label: 'ESTJ（幹部）', aiHint: '実務力・明快・秩序重視'),
+  TypeOption(key: 'ESFJ', label: 'ESFJ（領事官）', aiHint: '社交性・思いやり・協調重視'),
+  TypeOption(key: 'ISTP', label: 'ISTP（巨匠）', aiHint: '冷静・観察力・単独行動も得意'),
+  TypeOption(key: 'ISFP', label: 'ISFP（冒険家）', aiHint: '感性・やさしさ・自然体'),
+  TypeOption(key: 'ESTP', label: 'ESTP（起業家）', aiHint: '行動力・即断即決・現場対応力'),
+  TypeOption(key: 'ESFP', label: 'ESFP（エンターテイナー）', aiHint: '明るさ・親しみやすさ・今を楽しむ'),
+];
+
+const List<TypeOption> standard16TypeOptionsWithUnknown = [
+  unknownTypeOption,
+  ...standard16TypeOptions,
+];
+
+const List<TypeOption> love16TypeOptions = [
+  TypeOption(key: 'LCRO', label: 'LCRO（ボス猫）', aiHint: '自分のペース・我が道・繊細さもある'),
+  TypeOption(
+    key: 'LCRE',
+    label: 'LCRE（隠れベイビー）',
+    aiHint: '誠実・不器用・甘えたい気持ちを隠しやすい',
+  ),
+  TypeOption(key: 'LCPO', label: 'LCPO（主役体質）', aiHint: '存在感・影響力・華やかさ'),
+  TypeOption(key: 'LCPE', label: 'LCPE（ツンデレヤンキー）', aiHint: '元気・照れ屋・仲間想い'),
+  TypeOption(key: 'LARO', label: 'LARO（憧れの先輩）', aiHint: '大人っぽい・さっぱり・信頼されやすい'),
+  TypeOption(key: 'LARE', label: 'LARE（カリスマバランサー）', aiHint: '統率力・調整力・安定感'),
+  TypeOption(key: 'LAPO', label: 'LAPO（パーフェクトカメレオン）', aiHint: '多面性・器用さ・切り替え上手'),
+  TypeOption(key: 'LAPE', label: 'LAPE（キャプテンライオン）', aiHint: '強さ・優しさ・包容力'),
+  TypeOption(key: 'FCRO', label: 'FCRO（ロマンスマジシャン）', aiHint: '距離感上手・観察力・空気を読む'),
+  TypeOption(key: 'FCRE', label: 'FCRE（ちゃっかりうさぎ）', aiHint: '人懐っこい・冷静・危機察知が早い'),
+  TypeOption(key: 'FCPO', label: 'FCPO（恋愛モンスター）', aiHint: '愛され力・ノリの良さ・感情表現'),
+  TypeOption(key: 'FCPE', label: 'FCPE（忠犬ハチ公）', aiHint: '素直・情が深い・まっすぐ'),
+  TypeOption(key: 'FARO', label: 'FARO（不思議生命体）', aiHint: '独特さ・自然体・読み切れない魅力'),
+  TypeOption(key: 'FARE', label: 'FARE（敏腕マネージャー）', aiHint: '冷静・観察力・支えるのが上手い'),
+  TypeOption(key: 'FAPO', label: 'FAPO（デビル天使）', aiHint: '自由さ・優しさ・意外性'),
+  TypeOption(key: 'FAPE', label: 'FAPE（最後の恋人）', aiHint: '包容力・安心感・長く寄り添える'),
+];
+
+const List<TypeOption> love16TypeOptionsWithUnknown = [
+  unknownTypeOption,
+  ...love16TypeOptions,
+];
+
+bool hasKnownTypeKey(String? key) {
+  final normalized = (key ?? '').trim().toUpperCase();
+  return normalized.isNotEmpty && normalized != unknownTypeKey;
+}
+
+TypeOption resolveTypeOption(List<TypeOption> options, String? key) {
+  final normalized = (key ?? '').trim().toUpperCase();
+  if (normalized.isEmpty || normalized == unknownTypeKey) {
+    return unknownTypeOption;
+  }
+
+  for (final option in options) {
+    if (option.key == normalized) {
+      return option;
+    }
+  }
+
+  return unknownTypeOption;
+}
+
+String typeLabelFor(List<TypeOption> options, String? key) {
+  return resolveTypeOption(options, key).label;
+}
+
+String typeAiHintFor(List<TypeOption> options, String? key) {
+  return resolveTypeOption(options, key).aiHint;
+}
+
+class ProfileTypeSelection {
+  final String selfStandardTypeKey;
+  final String selfLoveTypeKey;
+  final String partnerStandardTypeKey;
+  final String partnerLoveTypeKey;
+
+  const ProfileTypeSelection({
+    this.selfStandardTypeKey = unknownTypeKey,
+    this.selfLoveTypeKey = unknownTypeKey,
+    this.partnerStandardTypeKey = unknownTypeKey,
+    this.partnerLoveTypeKey = unknownTypeKey,
+  });
+
+  static const empty = ProfileTypeSelection();
+
+  String get selfStandardTypeLabel =>
+      typeLabelFor(standard16TypeOptions, selfStandardTypeKey);
+
+  String get selfLoveTypeLabel =>
+      typeLabelFor(love16TypeOptions, selfLoveTypeKey);
+
+  String get partnerStandardTypeLabel =>
+      typeLabelFor(standard16TypeOptions, partnerStandardTypeKey);
+
+  String get partnerLoveTypeLabel =>
+      typeLabelFor(love16TypeOptions, partnerLoveTypeKey);
+
+  bool get hasAnyKnownType =>
+      hasKnownTypeKey(selfStandardTypeKey) ||
+      hasKnownTypeKey(selfLoveTypeKey) ||
+      hasKnownTypeKey(partnerStandardTypeKey) ||
+      hasKnownTypeKey(partnerLoveTypeKey);
+
+  ProfileTypeSelection copyWith({
+    String? selfStandardTypeKey,
+    String? selfLoveTypeKey,
+    String? partnerStandardTypeKey,
+    String? partnerLoveTypeKey,
+  }) {
+    return ProfileTypeSelection(
+      selfStandardTypeKey: selfStandardTypeKey ?? this.selfStandardTypeKey,
+      selfLoveTypeKey: selfLoveTypeKey ?? this.selfLoveTypeKey,
+      partnerStandardTypeKey:
+          partnerStandardTypeKey ?? this.partnerStandardTypeKey,
+      partnerLoveTypeKey: partnerLoveTypeKey ?? this.partnerLoveTypeKey,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'selfStandardTypeKey': selfStandardTypeKey,
+      'selfLoveTypeKey': selfLoveTypeKey,
+      'partnerStandardTypeKey': partnerStandardTypeKey,
+      'partnerLoveTypeKey': partnerLoveTypeKey,
+    };
+  }
+
+  factory ProfileTypeSelection.fromMap(Map<String, dynamic> map) {
+    String readKey(String name) {
+      final raw = (map[name] ?? '').toString().trim().toUpperCase();
+      return raw.isEmpty ? unknownTypeKey : raw;
+    }
+
+    return ProfileTypeSelection(
+      selfStandardTypeKey: readKey('selfStandardTypeKey'),
+      selfLoveTypeKey: readKey('selfLoveTypeKey'),
+      partnerStandardTypeKey: readKey('partnerStandardTypeKey'),
+      partnerLoveTypeKey: readKey('partnerLoveTypeKey'),
+    );
+  }
+}
+
+List<String> buildProfileTypeContextLines(
+  ProfileTypeSelection selection, {
+  bool includeLoveTypes = true,
+}) {
+  final lines = <String>[];
+
+  if (hasKnownTypeKey(selection.selfStandardTypeKey)) {
+    final option = resolveTypeOption(
+      standard16TypeOptions,
+      selection.selfStandardTypeKey,
+    );
+    lines.add('自分の通常16タイプ: ${option.label}');
+    if (option.aiHint.isNotEmpty) {
+      lines.add('自分の通常16タイプの短い傾向: ${option.aiHint}');
+    }
+  }
+
+  if (includeLoveTypes && hasKnownTypeKey(selection.selfLoveTypeKey)) {
+    final option = resolveTypeOption(
+      love16TypeOptions,
+      selection.selfLoveTypeKey,
+    );
+    lines.add('自分の恋愛16タイプ: ${option.label}');
+    if (option.aiHint.isNotEmpty) {
+      lines.add('自分の恋愛16タイプの短い傾向: ${option.aiHint}');
+    }
+  }
+
+  if (hasKnownTypeKey(selection.partnerStandardTypeKey)) {
+    final option = resolveTypeOption(
+      standard16TypeOptions,
+      selection.partnerStandardTypeKey,
+    );
+    lines.add('相手の通常16タイプ: ${option.label}');
+    if (option.aiHint.isNotEmpty) {
+      lines.add('相手の通常16タイプの短い傾向: ${option.aiHint}');
+    }
+  }
+
+  if (includeLoveTypes && hasKnownTypeKey(selection.partnerLoveTypeKey)) {
+    final option = resolveTypeOption(
+      love16TypeOptions,
+      selection.partnerLoveTypeKey,
+    );
+    lines.add('相手の恋愛16タイプ: ${option.label}');
+    if (option.aiHint.isNotEmpty) {
+      lines.add('相手の恋愛16タイプの短い傾向: ${option.aiHint}');
+    }
+  }
+
+  return lines;
+}
+
+String buildProfileTypeContext(
+  ProfileTypeSelection selection, {
+  bool includeLoveTypes = true,
+}) {
+  return buildProfileTypeContextLines(
+    selection,
+    includeLoveTypes: includeLoveTypes,
+  ).join('\n');
+}
+
+class ProfileTypeStorage {
+  static const _key = 'go_men_profile_type_selection_map_v1';
+
+  static Future<Map<String, ProfileTypeSelection>> loadAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+
+    if (raw == null || raw.trim().isEmpty) {
+      return {};
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return {};
+      }
+
+      final result = <String, ProfileTypeSelection>{};
+
+      decoded.forEach((key, value) {
+        final id = key.toString().trim();
+        if (id.isEmpty) {
+          return;
+        }
+
+        if (value is Map<String, dynamic>) {
+          result[id] = ProfileTypeSelection.fromMap(value);
+          return;
+        }
+
+        if (value is Map) {
+          result[id] = ProfileTypeSelection.fromMap(
+            value.map((k, v) => MapEntry(k.toString(), v)),
+          );
+        }
+      });
+
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveAll(
+    Map<String, ProfileTypeSelection> selections,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = <String, dynamic>{};
+
+    selections.forEach((key, value) {
+      final id = key.trim();
+      if (id.isEmpty) {
+        return;
+      }
+      map[id] = value.toMap();
+    });
+
+    await prefs.setString(_key, jsonEncode(map));
+  }
+
+  static Future<ProfileTypeSelection> loadForProfileId(String profileId) async {
+    final id = profileId.trim();
+    if (id.isEmpty) {
+      return ProfileTypeSelection.empty;
+    }
+
+    final all = await loadAll();
+    return all[id] ?? ProfileTypeSelection.empty;
+  }
+
+  static Future<void> saveForProfileId(
+    String profileId,
+    ProfileTypeSelection selection,
+  ) async {
+    final id = profileId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+
+    final all = await loadAll();
+    all[id] = selection;
+    await saveAll(all);
+  }
+
+  static Future<void> removeForProfileId(String profileId) async {
+    final id = profileId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+
+    final all = await loadAll();
+    all.remove(id);
+    await saveAll(all);
+  }
+}
+// === go-men personality types end ===
+
 class PlanLimits {
   static const int freeDailyUses = 3;
   static const int freeSavedResults = 3;
@@ -417,11 +750,16 @@ class RelationshipProfile {
     required this.avoidWords,
     required this.notes,
     required this.createdAt,
+    this.selfStandardTypeId = 'unknown',
+    this.selfLoveTypeId = 'unknown',
+    this.partnerStandardTypeId = 'unknown',
+    this.partnerLoveTypeId = 'unknown',
   });
 
   final String id;
   final String displayName;
   final String relationType;
+  final List<String> relationDetails;
   final String sensitiveTo;
   final String worksWellWith;
   final String distancePreference;
@@ -429,7 +767,10 @@ class RelationshipProfile {
   final String avoidWords;
   final String notes;
   final String createdAt;
-  final List<String> relationDetails;
+  final String selfStandardTypeId;
+  final String selfLoveTypeId;
+  final String partnerStandardTypeId;
+  final String partnerLoveTypeId;
 
   String get relationDetailSummary {
     return relationDetails
@@ -470,17 +811,47 @@ class RelationshipProfile {
   }
 
   String toProfileContext() {
-    return '''
-相手の名前・呼び名: $displayName
-関係性: $relationSummaryLabel
-傷つきやすい言い方: ${sensitiveTo.isEmpty ? '未設定' : sensitiveTo}
-通りやすい伝え方: ${worksWellWith.isEmpty ? '未設定' : worksWellWith}
-距離感の傾向: ${distancePreference.isEmpty ? '未設定' : distancePreference}
-よく揉めるテーマ: ${commonConflicts.isEmpty ? '未設定' : commonConflicts}
-避けたいワード: ${avoidWords.isEmpty ? '未設定' : avoidWords}
-補足メモ: ${notes.isEmpty ? '未設定' : notes}
-'''
-        .trim();
+    TypeOption? findOption(List<TypeOption> options, String id) {
+      for (final option in options) {
+        if (option.key == id) {
+          return option;
+        }
+      }
+      return null;
+    }
+
+    final lines = <String>[
+      '相手の名前・呼び名: $displayName',
+      '関係性: $relationSummaryLabel',
+      '傷つきやすい言い方: ${sensitiveTo.isEmpty ? '未設定' : sensitiveTo}',
+      '通りやすい伝え方: ${worksWellWith.isEmpty ? '未設定' : worksWellWith}',
+      '距離感の傾向: ${distancePreference.isEmpty ? '未設定' : distancePreference}',
+      'よく揉めるテーマ: ${commonConflicts.isEmpty ? '未設定' : commonConflicts}',
+      '避けたいワード: ${avoidWords.isEmpty ? '未設定' : avoidWords}',
+      '補足メモ: ${notes.isEmpty ? '未設定' : notes}',
+    ];
+
+    void addTypeLines(String title, String id, List<TypeOption> options) {
+      final normalized = id.trim().isEmpty ? 'unknown' : id.trim();
+      final option = findOption(options, normalized);
+      final label = option?.label ?? '不明 / 無回答';
+      lines.add('$title: $label');
+      final hint = (option?.aiHint ?? '').trim();
+      if (hint.isNotEmpty && normalized != 'unknown') {
+        lines.add('$titleの短い傾向: $hint');
+      }
+    }
+
+    addTypeLines('自分の通常16タイプ', selfStandardTypeId, standard16TypeOptions);
+    if (relationType == 'couple') {
+      addTypeLines('自分の恋愛16タイプ', selfLoveTypeId, love16TypeOptions);
+    }
+    addTypeLines('相手の通常16タイプ', partnerStandardTypeId, standard16TypeOptions);
+    if (relationType == 'couple') {
+      addTypeLines('相手の恋愛16タイプ', partnerLoveTypeId, love16TypeOptions);
+    }
+
+    return lines.join('\n');
   }
 
   Map<String, dynamic> toMap() {
@@ -496,26 +867,82 @@ class RelationshipProfile {
       'avoidWords': avoidWords,
       'notes': notes,
       'createdAt': createdAt,
+      'selfStandardTypeId': selfStandardTypeId,
+      'selfLoveTypeId': selfLoveTypeId,
+      'partnerStandardTypeId': partnerStandardTypeId,
+      'partnerLoveTypeId': partnerLoveTypeId,
     };
   }
 
   factory RelationshipProfile.fromMap(Map<String, dynamic> map) {
+    List<String> readStringList(dynamic raw) {
+      if (raw is! List) return const <String>[];
+      return raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
+    String readString(String key, [String fallback = '']) {
+      final raw = map[key];
+      if (raw == null) return fallback;
+      final value = raw.toString().trim();
+      return value.isEmpty ? fallback : value;
+    }
+
     return RelationshipProfile(
-      id: map['id'] as String,
-      displayName: map['displayName'] as String,
-      relationType: map['relationType'] as String,
-      relationDetails:
-          (map['relationDetails'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      sensitiveTo: map['sensitiveTo'] as String? ?? '',
-      worksWellWith: map['worksWellWith'] as String? ?? '',
-      distancePreference: map['distancePreference'] as String? ?? '',
-      commonConflicts: map['commonConflicts'] as String? ?? '',
-      avoidWords: map['avoidWords'] as String? ?? '',
-      notes: map['notes'] as String? ?? '',
-      createdAt: map['createdAt'] as String,
+      id: readString('id', DateTime.now().millisecondsSinceEpoch.toString()),
+      displayName: readString('displayName'),
+      relationType: readString('relationType'),
+      relationDetails: readStringList(map['relationDetails']),
+      sensitiveTo: readString('sensitiveTo'),
+      worksWellWith: readString('worksWellWith'),
+      distancePreference: readString('distancePreference'),
+      commonConflicts: readString('commonConflicts'),
+      avoidWords: readString('avoidWords'),
+      notes: readString('notes'),
+      createdAt: readString('createdAt', DateTime.now().toIso8601String()),
+      selfStandardTypeId: readString('selfStandardTypeId', 'unknown'),
+      selfLoveTypeId: readString('selfLoveTypeId', 'unknown'),
+      partnerStandardTypeId: readString('partnerStandardTypeId', 'unknown'),
+      partnerLoveTypeId: readString('partnerLoveTypeId', 'unknown'),
+    );
+  }
+
+  RelationshipProfile copyWith({
+    String? id,
+    String? displayName,
+    String? relationType,
+    List<String>? relationDetails,
+    String? sensitiveTo,
+    String? worksWellWith,
+    String? distancePreference,
+    String? commonConflicts,
+    String? avoidWords,
+    String? notes,
+    String? createdAt,
+    String? selfStandardTypeId,
+    String? selfLoveTypeId,
+    String? partnerStandardTypeId,
+    String? partnerLoveTypeId,
+  }) {
+    return RelationshipProfile(
+      id: id ?? this.id,
+      displayName: displayName ?? this.displayName,
+      relationType: relationType ?? this.relationType,
+      relationDetails: relationDetails ?? this.relationDetails,
+      sensitiveTo: sensitiveTo ?? this.sensitiveTo,
+      worksWellWith: worksWellWith ?? this.worksWellWith,
+      distancePreference: distancePreference ?? this.distancePreference,
+      commonConflicts: commonConflicts ?? this.commonConflicts,
+      avoidWords: avoidWords ?? this.avoidWords,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      selfStandardTypeId: selfStandardTypeId ?? this.selfStandardTypeId,
+      selfLoveTypeId: selfLoveTypeId ?? this.selfLoveTypeId,
+      partnerStandardTypeId:
+          partnerStandardTypeId ?? this.partnerStandardTypeId,
+      partnerLoveTypeId: partnerLoveTypeId ?? this.partnerLoveTypeId,
     );
   }
 }
@@ -1784,338 +2211,398 @@ class ProfileEditScreen extends StatefulWidget {
 }
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
-  late final TextEditingController _nameController;
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _displayNameController;
+  late final TextEditingController _relationDetailsController;
   late final TextEditingController _sensitiveToController;
   late final TextEditingController _worksWellWithController;
-  late final TextEditingController _distanceController;
+  late final TextEditingController _distancePreferenceController;
   late final TextEditingController _commonConflictsController;
   late final TextEditingController _avoidWordsController;
   late final TextEditingController _notesController;
 
-  String? _relationType;
-  List<String> _relationDetails = <String>[];
+  late String _relationType;
+  late String _selfStandardTypeId;
+  late String _selfLoveTypeId;
+  late String _partnerStandardTypeId;
+  late String _partnerLoveTypeId;
+
+  bool get _isCouple => _relationType == 'couple';
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(
-      text: widget.profile?.displayName ?? '',
+    final profile = widget.profile;
+    _displayNameController = TextEditingController(
+      text: profile?.displayName ?? '',
+    );
+    _relationDetailsController = TextEditingController(
+      text: (profile?.relationDetails ?? const <String>[]).join('\n'),
     );
     _sensitiveToController = TextEditingController(
-      text: widget.profile?.sensitiveTo ?? '',
+      text: profile?.sensitiveTo ?? '',
     );
     _worksWellWithController = TextEditingController(
-      text: widget.profile?.worksWellWith ?? '',
+      text: profile?.worksWellWith ?? '',
     );
-    _distanceController = TextEditingController(
-      text: widget.profile?.distancePreference ?? '',
+    _distancePreferenceController = TextEditingController(
+      text: profile?.distancePreference ?? '',
     );
     _commonConflictsController = TextEditingController(
-      text: widget.profile?.commonConflicts ?? '',
+      text: profile?.commonConflicts ?? '',
     );
     _avoidWordsController = TextEditingController(
-      text: widget.profile?.avoidWords ?? '',
+      text: profile?.avoidWords ?? '',
     );
-    _notesController = TextEditingController(text: widget.profile?.notes ?? '');
-    _relationType = widget.profile?.relationType;
-    _relationDetails = List<String>.from(
-      widget.profile?.relationDetails ?? const [],
-    );
+    _notesController = TextEditingController(text: profile?.notes ?? '');
+
+    _relationType = (profile?.relationType ?? 'couple').trim();
+    _selfStandardTypeId = (profile?.selfStandardTypeId ?? 'unknown').trim();
+    _selfLoveTypeId = (profile?.selfLoveTypeId ?? 'unknown').trim();
+    _partnerStandardTypeId = (profile?.partnerStandardTypeId ?? 'unknown')
+        .trim();
+    _partnerLoveTypeId = (profile?.partnerLoveTypeId ?? 'unknown').trim();
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _displayNameController.dispose();
+    _relationDetailsController.dispose();
     _sensitiveToController.dispose();
     _worksWellWithController.dispose();
-    _distanceController.dispose();
+    _distancePreferenceController.dispose();
     _commonConflictsController.dispose();
     _avoidWordsController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
-  void _save() async {
-    if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('相手の名前や呼び名を入れてください')));
-      return;
-    }
+  List<String> _parseRelationDetails(String raw) {
+    return raw
+        .split(RegExp(r'[\n、,，/／]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
 
-    if (_relationType == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('関係性を選んでください')));
-      return;
-    }
-
-    if (widget.profile == null) {
-      final existingProfiles = await ProfileStorage.loadProfiles();
-      final plan = await GoMenPlanStorage.loadPlan();
-      final maxProfiles = PlanLimits.profilesForPlan(plan);
-
-      if (existingProfiles.length >= maxProfiles) {
-        if (!mounted) return;
-        final message = plan == GoMenPlan.pro
-            ? 'プロフィールの上限に達しています。不要なプロフィールを整理してください。'
-            : '無料版ではプロフィールは1件までです。Go-men Pro で複数プロフィールを保存できます。';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-        return;
+  String _normalizeTypeId(String? value, List<TypeOption> options) {
+    final normalized = (value ?? '').trim();
+    if (normalized.isEmpty) return 'unknown';
+    for (final option in options) {
+      if (option.key == normalized) {
+        return normalized;
       }
     }
+    return 'unknown';
+  }
+
+  Widget _buildTypeDropdownCard({
+    required String title,
+    required String currentValue,
+    required List<TypeOption> options,
+    required ValueChanged<String> onChanged,
+    String? subtitle,
+  }) {
+    final normalizedValue = _normalizeTypeId(currentValue, options);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: goMenMutedTextColor(context),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: normalizedValue,
+              isExpanded: true,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: 'unknown',
+                  child: Text('不明 / 無回答'),
+                ),
+                ...options.map(
+                  (option) => DropdownMenuItem<String>(
+                    value: option.key,
+                    child: Text(option.label),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                onChanged(
+                  (value ?? 'unknown').trim().isEmpty ? 'unknown' : value!,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
 
     final profile = RelationshipProfile(
       id:
           widget.profile?.id ??
-          DateTime.now().microsecondsSinceEpoch.toString(),
-      displayName: _nameController.text.trim(),
-      relationType: _relationType!,
-      relationDetails: List<String>.from(_relationDetails),
+          DateTime.now().millisecondsSinceEpoch.toString(),
+      displayName: _displayNameController.text.trim(),
+      relationType: _relationType,
+      relationDetails: _parseRelationDetails(_relationDetailsController.text),
       sensitiveTo: _sensitiveToController.text.trim(),
       worksWellWith: _worksWellWithController.text.trim(),
-      distancePreference: _distanceController.text.trim(),
+      distancePreference: _distancePreferenceController.text.trim(),
       commonConflicts: _commonConflictsController.text.trim(),
       avoidWords: _avoidWordsController.text.trim(),
       notes: _notesController.text.trim(),
       createdAt: widget.profile?.createdAt ?? DateTime.now().toIso8601String(),
+      selfStandardTypeId: _normalizeTypeId(
+        _selfStandardTypeId,
+        standard16TypeOptions,
+      ),
+      selfLoveTypeId: _isCouple
+          ? _normalizeTypeId(_selfLoveTypeId, love16TypeOptions)
+          : 'unknown',
+      partnerStandardTypeId: _normalizeTypeId(
+        _partnerStandardTypeId,
+        standard16TypeOptions,
+      ),
+      partnerLoveTypeId: _isCouple
+          ? _normalizeTypeId(_partnerLoveTypeId, love16TypeOptions)
+          : 'unknown',
     );
 
     await ProfileStorage.saveProfile(profile);
+    await ProfileStorage.setActiveProfileId(profile.id);
 
     if (!mounted) return;
     Navigator.of(context).pop();
-  }
-
-  Future<void> _deleteProfile() async {
-    await ProfileStorage.clearProfile();
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  }
-
-  List<_RelationDetailGroup> get _relationDetailGroups {
-    return _profileRelationDetailGroupsFor(_relationType);
-  }
-
-  void _selectRelationDetail(_RelationDetailGroup group, String option) {
-    setState(() {
-      _relationDetails.removeWhere((item) => group.options.contains(item));
-      _relationDetails.add(option);
-    });
-  }
-
-  Widget _relationButton(String value, String label) {
-    final selected = _relationType == value;
-
-    if (selected) {
-      return ElevatedButton(
-        onPressed: () {
-          setState(() {
-            _relationType = value;
-            _relationDetails = <String>[];
-          });
-        },
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-        child: Text(label),
-      );
-    }
-
-    return OutlinedButton(
-      onPressed: () {
-        setState(() {
-          _relationType = value;
-        });
-      },
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-      child: Text(label),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.profile != null;
+    final relationOptions = const <MapEntry<String, String>>[
+      MapEntry('couple', '恋人・パートナー'),
+      MapEntry('friend', '友人'),
+      MapEntry('family_parent_child', '家族 / 親子'),
+      MapEntry('family_sibling', '家族 / 兄弟姉妹'),
+      MapEntry('family_inlaw', '家族 / 義家族'),
+      MapEntry('family_other', '家族 / その他'),
+      MapEntry('other', 'その他'),
+    ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing ? '関係性プロフィールを編集' : '関係性プロフィールを作成'),
-        actions: [
-          if (isEditing)
-            IconButton(
-              onPressed: _deleteProfile,
-              icon: const Icon(Icons.delete_outline),
-              tooltip: '削除',
-            ),
-        ],
+        title: Text(widget.profile == null ? 'プロフィール設定' : 'プロフィール編集'),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          children: [
-            Text(
-              '相手の名前・呼び名',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '例: みほ、彼、母',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '関係性',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _relationButton('couple', '恋人・パートナー'),
-            const SizedBox(height: 10),
-            _relationButton('friend', '友人'),
-            const SizedBox(height: 10),
-            _relationButton('family', '家族'),
-            const SizedBox(height: 10),
-            _relationButton('other', 'その他'),
-            if (_relationDetailGroups.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text(
-                'もう少し詳しく',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              TextFormField(
+                controller: _displayNameController,
+                decoration: const InputDecoration(
+                  labelText: '相手の名前や呼び名',
+                  hintText: '例: さや / 先輩 / 母 など',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if ((value ?? '').trim().isEmpty) {
+                    return '相手の名前や呼び名を入力してください';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
-              Text(
-                'ここを入れておくと、相談時の言い換えがより相手に合いやすくなります',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black54,
-                  height: 1.5,
+              DropdownButtonFormField<String>(
+                initialValue: _relationType,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '関係性',
+                  border: OutlineInputBorder(),
+                ),
+                items: relationOptions
+                    .map(
+                      (entry) => DropdownMenuItem<String>(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _relationType = value;
+                    if (!_isCouple) {
+                      _selfLoveTypeId = 'unknown';
+                      _partnerLoveTypeId = 'unknown';
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _relationDetailsController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '関係の詳細（任意）',
+                  hintText: '例: 学校の友人 / 職場の同僚 / 兄弟姉妹\n改行・読点区切りで複数入力できます',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 16),
-              for (final group in _relationDetailGroups) ...[
-                Text(
-                  group.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+              const Text(
+                '相手の傾向メモ',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _sensitiveToController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '傷つきやすい言い方',
+                  hintText: '例: 強い断定、責める言い方、無視されたと感じる反応',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final option in group.options)
-                      ChoiceChip(
-                        label: Text(option),
-                        selected: _relationDetails.contains(option),
-                        onSelected: (_) => _selectRelationDetail(group, option),
-                      ),
-                  ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _worksWellWithController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '通りやすい伝え方',
+                  hintText: '例: まず共感してから、結論をやわらかく伝える',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
                 ),
-                const SizedBox(height: 18),
-              ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _distancePreferenceController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '距離感の傾向',
+                  hintText: '例: こまめな連絡がほしい / 一人時間も大事',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _commonConflictsController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'よく揉めるテーマ',
+                  hintText: '例: 返信速度 / 言い方 / 約束の優先順位',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _avoidWordsController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '避けたいワード',
+                  hintText: '例: どうせ / 普通は / 面倒くさい',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _notesController,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: '補足メモ（任意）',
+                  hintText: '最近のすれ違い、背景事情、気をつけたいこと',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildTypeDropdownCard(
+                title: '自分の通常16タイプ',
+                subtitle: 'ふだんの考え方・対人傾向として使います。',
+                currentValue: _selfStandardTypeId,
+                options: standard16TypeOptions,
+                onChanged: (value) {
+                  setState(() {
+                    _selfStandardTypeId = value;
+                  });
+                },
+              ),
+              if (_isCouple)
+                _buildTypeDropdownCard(
+                  title: '自分の恋愛16タイプ',
+                  subtitle: '恋愛関係のときの傾向として使います。',
+                  currentValue: _selfLoveTypeId,
+                  options: love16TypeOptions,
+                  onChanged: (value) {
+                    setState(() {
+                      _selfLoveTypeId = value;
+                    });
+                  },
+                ),
+              _buildTypeDropdownCard(
+                title: '相手の通常16タイプ',
+                subtitle: '相手のふだんの傾向として使います。',
+                currentValue: _partnerStandardTypeId,
+                options: standard16TypeOptions,
+                onChanged: (value) {
+                  setState(() {
+                    _partnerStandardTypeId = value;
+                  });
+                },
+              ),
+              if (_isCouple)
+                _buildTypeDropdownCard(
+                  title: '相手の恋愛16タイプ',
+                  subtitle: '相手の恋愛場面での傾向として使います。',
+                  currentValue: _partnerLoveTypeId,
+                  options: love16TypeOptions,
+                  onChanged: (value) {
+                    setState(() {
+                      _partnerLoveTypeId = value;
+                    });
+                  },
+                ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: _save,
+                child: Text(widget.profile == null ? 'プロフィールを保存' : '変更を保存'),
+              ),
             ],
-            const SizedBox(height: 24),
-            Text(
-              '傷つきやすい言い方',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _sensitiveToController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '例: 冷たい言い方、返事の催促、強い決めつけ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '通りやすい伝え方',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _worksWellWithController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '例: まず受け止める、短くやさしく伝える',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '距離感の傾向',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _distanceController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '例: 一度引かれると追われるのが苦手',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'よく揉めるテーマ',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _commonConflictsController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '例: 連絡頻度、予定変更、言い方',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '避けたいワード',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _avoidWordsController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '例: なんで、いつも、普通は',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '補足メモ',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notesController,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: '例: 疲れている時は返信が遅くなる',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 28),
-            ElevatedButton(
-              onPressed: _save,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-              ),
-              child: Text('このプロフィールを保存する', style: TextStyle(fontSize: 18)),
-            ),
-          ],
+          ),
         ),
       ),
     );
