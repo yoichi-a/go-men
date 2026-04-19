@@ -565,14 +565,14 @@ def _request_to_prompt_lines(request, heading: str) -> str:
 def build_consult_input(request) -> str:
     return _request_to_prompt_lines(
         request,
-        "以下は相談内容です。状況整理・相手視点・今送るべきか・送るなら自然な返信案を検討してください。",
+        "以下は相談内容です。json形式で、状況整理・相手視点・今送るべきか・送るなら自然な返信案を返してください。",
     )
 
 
 def build_precheck_prompt(request) -> str:
     return _request_to_prompt_lines(
         request,
-        "以下は送信前チェック依頼です。きつさ・誤解リスク・改善案を検討してください。",
+        "以下は送信前チェック依頼です。json形式で、きつさ・誤解リスク・改善案を返してください。",
     )
 
 @app.post("/compatibility/score")
