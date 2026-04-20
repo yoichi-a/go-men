@@ -99,26 +99,73 @@ def _ensure_len(items: List[str], n: int, fallback_prefix: str) -> List[str]:
 
 
 def normalize_consult_result(data: dict[str, Any]) -> dict[str, Any]:
-    send_timing = data.get("send_timing_recommendation")
-    if not isinstance(send_timing, dict):
-        send_timing = {}
+    def _first_text(*values: Any) -> str:
+        for value in values:
+            if value is None:
+                continue
+            if isinstance(value, str):
+                s = value.strip()
+                if s:
+                    return s
+            elif isinstance(value, dict):
+                continue
+            else:
+                s = str(value).strip()
+                if s:
+                    return s
+        return ""
+
+    def _read_reply_item(item: Any, fallback_type: str) -> Optional[dict[str, str]]:
+        if not isinstance(item, dict):
+            return None
+        title = str(item.get("title", "")).strip()
+        body = str(item.get("body", "")).strip()
+        if not title or not body:
+            return None
+        reply_type = str(item.get("type", "")).strip() or fallback_type
+        return {
+            "type": reply_type,
+            "title": title,
+            "body": body,
+        }
+
+    send_timing_dict = data.get("send_timing_recommendation")
+    if not isinstance(send_timing_dict, dict):
+        send_timing_dict = {}
+
+    best_reply = _read_reply_item(data.get("best_reply"), "best_reply")
+
+    other_replies: List[dict[str, str]] = []
+    other_replies_raw = data.get("other_replies")
+    if isinstance(other_replies_raw, list):
+        for i, item in enumerate(other_replies_raw, start=1):
+            parsed = _read_reply_item(item, f"alternative_reply_{i}")
+            if parsed:
+                other_replies.append(parsed)
 
     reply_options_raw = data.get("reply_options")
-    reply_options: List[dict[str, str]] = []
     if isinstance(reply_options_raw, list):
-        for item in reply_options_raw:
+        parsed_options: List[dict[str, str]] = []
+        for i, item in enumerate(reply_options_raw):
             if isinstance(item, dict):
                 title = str(item.get("title", "")).strip()
                 body = str(item.get("body", "")).strip()
-                reply_type = str(item.get("type", "")).strip()
+                reply_type = str(item.get("type", "")).strip() or (
+                    "best_reply" if i == 0 else f"alternative_reply_{i}"
+                )
                 if title and body:
-                    reply_options.append(
+                    parsed_options.append(
                         {
-                            "type": reply_type or "reply",
+                            "type": reply_type,
                             "title": title,
                             "body": body,
                         }
                     )
+        if parsed_options:
+            if best_reply is None:
+                best_reply = parsed_options[0]
+            if not other_replies:
+                other_replies = parsed_options[1:3]
 
     defaults = [
         {
@@ -137,6 +184,11 @@ def normalize_consult_result(data: dict[str, Any]) -> dict[str, Any]:
             "body": "今このままやり取りを続けると余計にこじれそうだから、少しだけ落ち着いてから話したい。無視したいわけじゃなくて、ちゃんと向き合うために少し整えたい。",
         },
     ]
+
+    reply_options: List[dict[str, str]] = []
+    if best_reply:
+        reply_options.append(best_reply)
+    reply_options.extend(other_replies)
 
     while len(reply_options) < 3:
         reply_options.append(defaults[len(reply_options)])
@@ -163,32 +215,38 @@ def normalize_consult_result(data: dict[str, Any]) -> dict[str, Any]:
         "送る前の注意",
     )
 
+    send_timing_label = _first_text(
+        data.get("send_timing"),
+        send_timing_dict.get("label"),
+        "少し整えてから送るのがよい",
+    )
+    send_timing_reason = _first_text(
+        data.get("send_timing_reason"),
+        send_timing_dict.get("reason"),
+        "今は伝えたい気持ちよりも、どう聞こえるかの影響が大きい状態です。短く整えてから送る方が悪化しにくいです。",
+    )
+
+    situation_summary = _first_text(
+        data.get("summary"),
+        data.get("situation_summary"),
+        "内容そのものより、言い方や受け取り方のズレでこじれている可能性があります。",
+    )
+    partner_feeling_estimate = _first_text(
+        data.get("partner_feeling_estimate"),
+        "相手は怒りそのものより、軽く扱われたことや理解されていないことに反応している可能性があります。",
+    )
+
     return {
         "session_id": str(data.get("session_id", "session_generated")),
         "analysis_status": "completed",
         "safety_flag": bool(data.get("safety_flag", False)),
         "send_timing_recommendation": {
-            "code": str(send_timing.get("code", "soften_first")),
-            "label": str(send_timing.get("label", "少し整えてから送るのがよい")),
-            "reason": str(
-                send_timing.get(
-                    "reason",
-                    "今は伝えたい気持ちよりも、どう聞こえるかの影響が大きい状態です。短く整えてから送る方が悪化しにくいです。",
-                )
-            ),
+            "code": str(send_timing_dict.get("code", "soften_first")),
+            "label": send_timing_label,
+            "reason": send_timing_reason,
         },
-        "situation_summary": str(
-            data.get(
-                "situation_summary",
-                "内容そのものより、言い方や受け取り方のズレでこじれている可能性があります。",
-            )
-        ),
-        "partner_feeling_estimate": str(
-            data.get(
-                "partner_feeling_estimate",
-                "相手は怒りそのものより、軽く扱われたことや理解されていないことに反応している可能性があります。",
-            )
-        ),
+        "situation_summary": situation_summary,
+        "partner_feeling_estimate": partner_feeling_estimate,
         "heard_as_interpretations": heard_as,
         "avoid_phrases": avoid_phrases,
         "reply_options": reply_options,
@@ -546,11 +604,73 @@ def _request_to_prompt_lines(request, heading: str) -> str:
     return "\n".join(lines)
 
 
+def _consult_case_style(request) -> str:
+    relation = str(getattr(request, "relation_type", "")).strip()
+    theme = str(getattr(request, "theme", "")).strip()
+    current_status = str(getattr(request, "current_status", "")).strip()
+    emotion_level = str(getattr(request, "emotion_level", "")).strip()
+    goal = str(getattr(request, "goal", "")).strip()
+
+    notes: List[str] = []
+
+    if relation == "couple":
+        notes.append("恋人同士の温度差、安心感、嫉妬、距離感の繊細さを重視してください。")
+    elif relation == "friend":
+        notes.append("友人関係の礼儀、約束、距離感、温度差を重視してください。")
+    elif relation.startswith("family"):
+        notes.append("家族関係の干渉、役割、比較、境界線を重視してください。")
+    else:
+        notes.append("相手との上下関係や距離感のズレを重視してください。")
+
+    if theme in {"嫉妬", "距離感", "人間関係・温度差"}:
+        notes.append("感情をぶつけるより、安心感と誤解の修正を優先してください。")
+    if theme in {"言い方がきつい", "約束", "親を挟んだ揉めごと", "パートナー経由の伝わり方"}:
+        notes.append("言い分の正しさより、受け取り方の悪化を止めることを優先してください。")
+    if theme in {"お金", "家事", "家のこと", "家のこと・役割分担", "生活や子育てへの口出し"}:
+        notes.append("感情処理だけでなく、境界線や具体的なすり合わせも含めてください。")
+
+    if current_status == "まだ何もしていない":
+        notes.append("初動の一通として自然で短い提案を優先してください。")
+    elif current_status in {"すでに一度やり取りした", "何往復かしてこじれている"}:
+        notes.append("これ以上悪化させない鎮静化を優先してください。")
+
+    if emotion_level in {"かなり感情的", "爆発しそう"}:
+        notes.append("感情の勢いをそのまま出す案は避け、短く安全な文を優先してください。")
+
+    if goal == "距離を置きたい":
+        notes.append("仲直りの演出より、角が立ちにくい境界線設定を優先してください。")
+    elif goal == "今は送らず整理したい":
+        notes.append("送らない判断も積極的に提案してください。")
+    elif goal in {"謝りたい", "仲直りしたい"}:
+        notes.append("自己弁護より、受け止めと安心感を優先してください。")
+
+    return " ".join(notes)
+
+
 def build_consult_input(request) -> str:
-    return _request_to_prompt_lines(
+    base = _request_to_prompt_lines(
         request,
-        "以下は相談内容です。json形式で、状況整理・相手視点・今送るべきか・送るなら自然な返信案を返してください。",
+        "以下は相談内容です。json形式で返してください。",
     )
+
+    rules = [
+        "[consult_output_rules]",
+        "- relation_type / relation_detail_labels / theme / theme_details / current_status / emotion_level / goal を主な判断材料にしてください。",
+        "- chat_text が短い場合や空欄の場合でも、選択された情報から具体的にケースを読み分けてください。",
+        f"- この相談で特に重視する観点: {_consult_case_style(request)}",
+        "- summary はこのケース特有の状況整理を1〜2文で書いてください。",
+        "- partner_feeling_estimate は相手がどう受け取ったかを、このケースに即して自然な日本語で書いてください。",
+        "- send_timing は短い自然な日本語で返してください。",
+        "- send_timing_reason は、このケースでなぜその判断になるのかを具体的に書いてください。",
+        "- best_reply は title と body を持つオブジェクトで返してください。",
+        "- other_replies は title と body を持つオブジェクトの配列で、2件返してください。",
+        "- heard_as_interpretations は2件、avoid_phrases は2件の自然な日本語配列で返してください。",
+        "- next_actions は3件、pre_send_cautions は3件の自然な日本語配列で返してください。",
+        "- 似たケースでも relation_type や goal が違えば、答えも明確に変えてください。",
+        "- 16type は補助的な仮説としてのみ使い、決めつけないでください。",
+    ]
+
+    return base + "\n\n" + "\n".join(rules)
 
 
 def build_precheck_prompt(request) -> str:
@@ -598,7 +718,19 @@ def create_consult_session(request: ConsultSessionRequest):
         response = client.responses.create(
             model=OPENAI_MODEL,
             instructions=(
-                "You are a careful relationship mediation assistant. ""Output valid JSON only. ""Always return these JSON keys: summary, partner_feeling_estimate, send_timing, send_timing_reason, best_reply, other_replies, heard_as_interpretations, avoid_phrases. ""Include heard_as_interpretations and avoid_phrases as arrays with exactly 2 natural Japanese strings each. ""Prioritize concrete, copy-ready Japanese replies over generic advice. ""Avoid repetitive template-like wording across different cases. ""Use relation details, profile context, recent patterns, and readable screenshot cues when available. ""When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. ""Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
+                "You are a careful relationship mediation assistant. "
+                "Output valid JSON only. "
+                "Always return these JSON keys: summary, partner_feeling_estimate, send_timing, send_timing_reason, best_reply, other_replies, heard_as_interpretations, avoid_phrases, next_actions, pre_send_cautions. "
+                "best_reply must be an object with title and body. "
+                "other_replies must be an array of exactly 2 objects with title and body. "
+                "heard_as_interpretations and avoid_phrases must each be arrays of exactly 2 natural Japanese strings. "
+                "next_actions and pre_send_cautions must each be arrays of exactly 3 natural Japanese strings. "
+                "Prioritize concrete, copy-ready Japanese replies over generic advice. "
+                "Do not collapse different cases into the same answer. "
+                "The selected relation, theme, theme details, current status, emotion level, and goal must materially change the output. "
+                "Use relation details, profile context, recent patterns, and readable screenshot cues when available. "
+                "When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. "
+                "Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
             ),
             input=[
                 {
