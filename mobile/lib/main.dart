@@ -3358,6 +3358,615 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   }
 }
 
+String _draftAnswer(ConsultationDraft draft, int index) {
+  if (index < 0 || index >= draft.themeAnswers.length) {
+    return '';
+  }
+  return draft.themeAnswers[index].trim();
+}
+
+String _draftAnswerBundle(ConsultationDraft draft) {
+  return draft.themeAnswers.where((e) => e.trim().isNotEmpty).join(' / ');
+}
+
+String _draftMetaLabel(ConsultationDraft draft, {required String fallback}) {
+  final bundle = _draftAnswerBundle(draft);
+  if (bundle.isEmpty) {
+    return fallback;
+  }
+  return '$fallback / $bundle';
+}
+
+String _statusTitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '今どの段階ですか？';
+    case '連絡頻度':
+      return '連絡まわりは今どんな状態ですか？';
+    case '言い方がきつい':
+      return '今そのやり取りはどんな空気ですか？';
+    case '約束':
+      return '約束の件はいまどこまで進んでいますか？';
+    case 'お金':
+      return 'お金の件はいまどんな状態ですか？';
+    case '距離感':
+      return '今の距離感はどんな状態ですか？';
+    case '価値観の違い':
+      return '価値観のズレは今どんな状態ですか？';
+    default:
+      return '今はどんな状態ですか？';
+  }
+}
+
+String _statusSubtitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '不安が心の中だけか、すでに表に出ているかに近いものを選んでください';
+    case '連絡頻度':
+      return '返信の止まり方や温度感にいちばん近いものを選んでください';
+    case '言い方がきつい':
+      return '傷つきや気まずさが今どう残っているかで選んでください';
+    case '約束':
+      return '未消化のままか、話し合いが始まっているかで選んでください';
+    case 'お金':
+      return '感情のこじれ方にいちばん近いものを選んでください';
+    default:
+      return 'いちばん近いものを選んでください';
+  }
+}
+
+String _goalTitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '今回はどこを目指したいですか？';
+    case '連絡頻度':
+      return '連絡のことで今回はどうしたいですか？';
+    case '言い方がきつい':
+      return 'この件をどう着地させたいですか？';
+    case '約束':
+      return '約束の件を今回はどうしたいですか？';
+    case 'お金':
+      return 'お金の件を今回はどう進めたいですか？';
+    default:
+      return '今回どうしたいですか？';
+  }
+}
+
+String _goalSubtitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '安心したいのか、伝えたいのか、線引きしたいのかで選んでください';
+    case '連絡頻度':
+      return '追い連絡、すり合わせ、いったん待つ、のどれに近いかで選んでください';
+    case '言い方がきつい':
+      return '謝る・伝える・落ち着かせる、のどれを優先したいかで選んでください';
+    default:
+      return '今いちばん近い目的を選んでください';
+  }
+}
+
+List<String> _statusOptionsForDraft(ConsultationDraft draft) {
+  final relationType = draft.relationType ?? '';
+  final theme = draft.theme ?? '';
+  final a1 = _draftAnswer(draft, 0);
+  final a2 = _draftAnswer(draft, 1);
+  final a3 = _draftAnswer(draft, 2);
+  final bundle = '$a1 / $a2 / $a3';
+
+  if (relationType == 'couple' && theme == '嫉妬') {
+    if (bundle.contains('相手') && bundle.contains('嫉妬')) {
+      return const [
+        '相手が疑ったり不安をぶつけてきている',
+        '相手が少しピリついている',
+        '何度か確認されて気まずい',
+        '一度言い合いになった',
+        'まだ大きくは揉めていない',
+        '今から安心させる返事をしたい',
+        '会う前に整理しておきたい',
+        '少し時間をおいてから話したい',
+      ];
+    }
+    return const [
+      'まだ言い出せていない',
+      '軽く聞いたがモヤモヤが残っている',
+      '嫉妬っぽい空気が出てしまっている',
+      'すでに言い合いになった',
+      '相手が防御的・反発気味',
+      '今から落ち着いて伝えたい',
+      '会う前に気持ちを整理したい',
+      'いったん様子を見たい',
+    ];
+  }
+
+  if (theme == '連絡頻度') {
+    if (bundle.contains('未読')) {
+      return const [
+        '未読がしばらく続いている',
+        '追い連絡したい気持ちが強い',
+        '追い連絡すると悪化しそう',
+        '他では動いていそうで不安',
+        '前にも同じことで揉めた',
+        '今は待つべきか迷っている',
+        '会う予定の前で気まずい',
+        'もう少しで爆発しそう',
+      ];
+    }
+    if (bundle.contains('既読')) {
+      return const [
+        '既読だが返ってこない',
+        '既読後の沈黙がつらい',
+        '何を送れば重くならないか迷う',
+        'すでに少し責めてしまった',
+        '相手の温度が低く感じる',
+        '今からもう一通送りたい',
+        '返事を待つべきか迷っている',
+        'いったん止めた方がよさそう',
+      ];
+    }
+    return const [
+      '返信はあるが温度差がつらい',
+      '連絡ペースのズレが積み重なっている',
+      '自分が求めすぎた気もする',
+      '相手が負担に感じていそう',
+      '話し合いまではできていない',
+      '今から軽く送ってみたい',
+      '今日は送らず様子を見たい',
+      '会う前に整理したい',
+    ];
+  }
+
+  if (theme == '言い方がきつい') {
+    if (bundle.contains('自分がきつく言ってしまった') ||
+        (bundle.contains('自分') && bundle.contains('きつ'))) {
+      return const [
+        '自分が強く言いすぎて気まずい',
+        '相手を傷つけた感じが残っている',
+        'すぐ謝りたいが言い方に迷う',
+        '相手が距離を取っている',
+        'すでに空気が悪くなっている',
+        'LINEで一言入れたい',
+        '電話や対面で話した方がよさそう',
+        '今は少し冷ました方がよさそう',
+      ];
+    }
+    return const [
+      '強い言い方がまだ引っかかっている',
+      '相手は普通だが自分だけ傷ついている',
+      '相手もイライラしていそう',
+      'すでに少し言い返してしまった',
+      '今すぐ返すと感情的になりそう',
+      '落ち着いて伝え直したい',
+      'まず距離を置きたい',
+      '対面で話した方がよさそう',
+    ];
+  }
+
+  if (theme == '約束') {
+    if (bundle.contains('自分') && !bundle.contains('お互い')) {
+      return const [
+        '自分が守れず気まずい',
+        '言い訳っぽくしたくない',
+        '相手が怒っていそう',
+        'すぐ謝りたい',
+        '埋め合わせも考えたい',
+        'まだ連絡できていない',
+        '一度謝ったが気まずいまま',
+        '今から丁寧に伝えたい',
+      ];
+    }
+    if (bundle.contains('お互い')) {
+      return const [
+        'どちらも少しずつ不満がある',
+        '責任の押し付け合いになりそう',
+        '細かい認識ズレが残っている',
+        'まだ整理して話せていない',
+        '感情より事実確認が必要',
+        '今から落ち着いて話したい',
+        '一度仕切り直したい',
+        '少し時間を置きたい',
+      ];
+    }
+    return const [
+      '相手に破られた感じが残っている',
+      '軽く扱われたようでつらい',
+      'まだちゃんと話せていない',
+      '言うと責める形になりそう',
+      '一度伝えたが伝わっていない',
+      '今から気持ちを伝えたい',
+      'まず事実確認したい',
+      '今日は触れない方がよさそう',
+    ];
+  }
+
+  if (theme == 'お金') {
+    return const [
+      'まだ具体的に話し合えていない',
+      '金額や負担感にモヤモヤがある',
+      '払う・返す話が止まっている',
+      '不公平感が強くなっている',
+      '一度揉めて気まずい',
+      '感情を抜いて確認したい',
+      '今すぐ返す・払う方向で動きたい',
+      '今日は話さない方がよさそう',
+    ];
+  }
+
+  if (theme == '距離感') {
+    return const [
+      '近すぎてしんどい',
+      '遠すぎて不安',
+      '自分ばかり合わせている感じがする',
+      '相手に重いと思われそうで言えない',
+      'すでに少し距離ができている',
+      '会う頻度や関わり方を相談したい',
+      'いったん一人の時間がほしい',
+      '今から柔らかく伝えたい',
+    ];
+  }
+
+  if (theme == '価値観の違い') {
+    return const [
+      '考え方のズレがずっと引っかかっている',
+      '片方だけが正しい話にしたくない',
+      '話すと平行線になりそう',
+      'すでに少し諦めが出ている',
+      'でも関係は壊したくない',
+      '違いとして整理したい',
+      '譲れる所と譲れない所を分けたい',
+      '今は深掘りしない方がよさそう',
+    ];
+  }
+
+  if (theme == '家事' || theme == '家のこと' || theme == '家のこと・役割分担') {
+    return const [
+      '負担の偏りがしんどい',
+      '言うと細かい人みたいで言いづらい',
+      '相手は気づいていなさそう',
+      'すでにイライラが溜まっている',
+      '一度言ったが続いていない',
+      '分担を見直したい',
+      '責めずにお願いしたい',
+      '今日は言わない方がよさそう',
+    ];
+  }
+
+  if (theme == '親の介入') {
+    return const [
+      '親のことが直接しんどい',
+      '相手が間に入ってくれずつらい',
+      '親の話題を出すと空気が悪くなる',
+      '自分が我慢しすぎている',
+      '境界線を引きたい',
+      'まず相手だけに伝えたい',
+      '会う前に整理したい',
+      '今は刺激しない方がよさそう',
+    ];
+  }
+
+  if (theme == '人間関係・温度差') {
+    return const [
+      '自分の熱量ばかり高い気がする',
+      '相手の優先順位が低く感じる',
+      '友人関係の温度差がしんどい',
+      '言うと重くなりそうで迷う',
+      '少し距離ができている',
+      '期待値を合わせたい',
+      '関係を軽く整えたい',
+      '今は一歩引きたい',
+    ];
+  }
+
+  if (theme == '行事・付き合い') {
+    return const [
+      '参加や頻度に温度差がある',
+      '断り方や伝わり方がしんどい',
+      '毎回こちらが気を遣っている',
+      '相手や家族に悪気はなさそう',
+      'でも負担は大きい',
+      'まずパートナーに伝えたい',
+      '今後の線引きを決めたい',
+      '今回は穏便にやり過ごしたい',
+    ];
+  }
+
+  if (theme == '生活や子育てへの口出し') {
+    return const [
+      '相手側の口出しがしんどい',
+      '自分たちのやり方を守りたい',
+      'パートナーが間に入ってくれない',
+      '言い返すと大ごとになりそう',
+      '我慢が積み重なっている',
+      'まずパートナーと足並みをそろえたい',
+      '柔らかく境界線を伝えたい',
+      '今は波風を立てたくない',
+    ];
+  }
+
+  if (theme == 'パートナー経由の伝わり方') {
+    return const [
+      '自分の意図と違って伝わった感じがする',
+      'パートナーの伝え方にモヤモヤがある',
+      '間接的な伝わり方でこじれている',
+      '直接言うか迷っている',
+      'まずパートナーと整理したい',
+      '相手を責めずに修正したい',
+      '今後の伝え方を決めたい',
+      '今日は広げない方がよさそう',
+    ];
+  }
+
+  if (theme == '口出し・干渉' || theme == '干渉・信頼' || theme == '信頼されていない感じ') {
+    return const [
+      '口を出されてしんどい',
+      '信頼されていない感じが続いている',
+      '反発したいが角が立ちそう',
+      'すでに少し空気が悪い',
+      '境界線を引きたい',
+      'まず気持ちだけ伝えたい',
+      '距離を少し取りたい',
+      '今は落ち着かせたい',
+    ];
+  }
+
+  if (theme == '比較される') {
+    return const [
+      '比べられて傷ついている',
+      '昔からの積み重なりがある',
+      '一回の話では済まない',
+      '言い返すと大きくなりそう',
+      'でも我慢し続けたくない',
+      '比較がつらいことを伝えたい',
+      '今後の距離を考えたい',
+      '今は深入りしない方がよさそう',
+    ];
+  }
+
+  if (theme == '親を挟んだ揉めごと') {
+    return const [
+      '親を挟んで話がややこしくなっている',
+      '直接の相手だけの問題ではなくなっている',
+      '事実と感情が混ざっている',
+      '誰に何を言うべきか迷う',
+      'まず順番を整理したい',
+      '直接ぶつからず整えたい',
+      '第三者を入れたい気持ちもある',
+      '今は感情的になりやすい',
+    ];
+  }
+
+  return const [
+    '相手が怒っている',
+    '自分が怒っている',
+    'お互い感情的',
+    '既読無視されている',
+    '未読のまま',
+    '会話が止まっている',
+    'さっき電話で揉めた',
+    '今から返信したい',
+  ];
+}
+
+List<String> _goalOptionsForDraft(ConsultationDraft draft) {
+  final theme = draft.theme ?? '';
+  final bundle = _draftAnswerBundle(draft);
+
+  if (theme == '嫉妬') {
+    if (bundle.contains('相手') && bundle.contains('嫉妬')) {
+      return const [
+        '相手を安心させたい',
+        '疑われてしんどいことを伝えたい',
+        '誤解を解きたい',
+        '今後の線引きを決めたい',
+        'まず落ち着かせたい',
+        '刺激せず様子を見たい',
+      ];
+    }
+    return const [
+      '責めずに不安を伝えたい',
+      '安心できる説明がほしい',
+      '自分の言い方を整えたい',
+      '今後の線引きを決めたい',
+      'まず謝りたい',
+      '今は落ち着きたい',
+    ];
+  }
+
+  if (theme == '連絡頻度') {
+    return const [
+      '連絡ペースをすり合わせたい',
+      '追い連絡しすぎず気持ちを伝えたい',
+      '不安を重くしすぎず伝えたい',
+      '責めすぎたなら謝りたい',
+      '今日は送らず様子を見たい',
+      '仲直りしたい',
+    ];
+  }
+
+  if (theme == '言い方がきつい') {
+    if (bundle.contains('自分がきつく言ってしまった') ||
+        (bundle.contains('自分') && bundle.contains('きつ'))) {
+      return const [
+        'まず謝りたい',
+        '言い方は悪かったが本音も伝えたい',
+        '相手を落ち着かせたい',
+        '言い直したい',
+        '少し時間を置きたい',
+        '関係を修復したい',
+      ];
+    }
+    return const [
+      '傷ついたことを穏やかに伝えたい',
+      'これ以上悪化させたくない',
+      '言い返したことも整えたい',
+      'まず距離を置きたい',
+      '謝ってほしい気持ちを整理したい',
+      '仲直りしたい',
+    ];
+  }
+
+  if (theme == '約束') {
+    if (bundle.contains('自分') && !bundle.contains('お互い')) {
+      return const [
+        'まず誠実に謝りたい',
+        '事情を言い訳っぽくせず伝えたい',
+        '埋め合わせを提案したい',
+        '相手を落ち着かせたい',
+        '信頼を戻したい',
+        '今は短く連絡したい',
+      ];
+    }
+    return const [
+      '約束を軽く扱われた気持ちを伝えたい',
+      'まず事実確認したい',
+      '再発しない形を決めたい',
+      '責めすぎず話したい',
+      '一度仕切り直したい',
+      '仲直りしたい',
+    ];
+  }
+
+  if (theme == 'お金') {
+    return const [
+      '金額や事実を冷静に確認したい',
+      '不公平感を穏やかに伝えたい',
+      '返金・支払いの話を進めたい',
+      '価値観の違いとして整理したい',
+      '関係を悪化させず線引きしたい',
+      '今日は送らず整えたい',
+    ];
+  }
+
+  if (theme == '距離感') {
+    return const [
+      'ちょうどいい距離を相談したい',
+      '重くならずに本音を伝えたい',
+      '少し距離を置きたい',
+      '不安にさせず一人の時間がほしい',
+      '期待値を合わせたい',
+      '関係を壊さず整えたい',
+    ];
+  }
+
+  if (theme == '価値観の違い') {
+    return const [
+      '勝ち負けにせず話したい',
+      '違いとして整理したい',
+      '譲れる所と譲れない所を分けたい',
+      '理解は難しくても尊重してほしい',
+      '深追いせず落ち着かせたい',
+      '関係を続ける前提で整えたい',
+    ];
+  }
+
+  if (theme == '家事' || theme == '家のこと' || theme == '家のこと・役割分担') {
+    return const [
+      '負担の偏りを伝えたい',
+      '責めずに分担を見直したい',
+      'お願いベースで話したい',
+      'ルールを決めたい',
+      '感情的にならず整えたい',
+      '今日は軽く触れるだけにしたい',
+    ];
+  }
+
+  if (theme == '親の介入') {
+    return const [
+      'まずパートナーに味方になってほしい',
+      '境界線を引きたい',
+      '親の話題で揉めずに伝えたい',
+      '自分のしんどさをわかってほしい',
+      '今後の対応方針を決めたい',
+      '今回は刺激せず流したい',
+    ];
+  }
+
+  if (theme == '人間関係・温度差') {
+    return const [
+      '期待値を合わせたい',
+      '温度差に傷ついたことを伝えたい',
+      '重くならず関係を整えたい',
+      '少し距離を置きたい',
+      '今後の関わり方を見直したい',
+      'まず自分の気持ちを整理したい',
+    ];
+  }
+
+  if (theme == '行事・付き合い') {
+    return const [
+      '無理のない参加ラインを決めたい',
+      'パートナーに間に入ってほしい',
+      '負担感を柔らかく伝えたい',
+      '今回は穏便に済ませたい',
+      '今後の線引きを決めたい',
+      '自分ばかり我慢しない形にしたい',
+    ];
+  }
+
+  if (theme == '生活や子育てへの口出し') {
+    return const [
+      'まずパートナーと足並みをそろえたい',
+      '口出しがしんどいことを伝えたい',
+      '自分たちの方針を守りたい',
+      '角を立てず境界線を引きたい',
+      '今回は穏便に済ませたい',
+      '今後の対応を決めたい',
+    ];
+  }
+
+  if (theme == 'パートナー経由の伝わり方') {
+    return const [
+      'まずパートナーと認識を合わせたい',
+      '自分の意図を正しく伝え直したい',
+      '責めずに伝え方を見直したい',
+      '間接伝達を減らしたい',
+      '今回は火消しを優先したい',
+      '今後の伝え方ルールを決めたい',
+    ];
+  }
+
+  if (theme == '口出し・干渉' || theme == '干渉・信頼' || theme == '信頼されていない感じ') {
+    return const [
+      '境界線を穏やかに伝えたい',
+      '信頼されていないしんどさを伝えたい',
+      'これ以上干渉されたくない',
+      'まず気持ちだけ共有したい',
+      '少し距離を置きたい',
+      '波風を立てず整えたい',
+    ];
+  }
+
+  if (theme == '比較される') {
+    return const [
+      '比較がつらいことを伝えたい',
+      '自分を一人の人として見てほしい',
+      '今後その話し方をやめてほしい',
+      '感情的にならず線を引きたい',
+      '少し距離を置きたい',
+      '今回は深追いしないでおきたい',
+    ];
+  }
+
+  if (theme == '親を挟んだ揉めごと') {
+    return const [
+      '誰と何を話すか順番を整理したい',
+      '直接ぶつからず整えたい',
+      '事実関係をまず確認したい',
+      '感情のエスカレートを止めたい',
+      '自分の立場を守りたい',
+      '今日は火を広げたくない',
+    ];
+  }
+
+  return const [
+    '謝りたい',
+    '誤解を解きたい',
+    '落ち着かせたい',
+    '仲直りしたい',
+    '距離を置きたい',
+    '相手の気持ちを知りたい',
+  ];
+}
+
 class CurrentStatusScreen extends StatelessWidget {
   const CurrentStatusScreen({super.key, required this.draft});
 
@@ -3374,22 +3983,13 @@ class CurrentStatusScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const statuses = [
-      '相手が怒っている',
-      '自分が怒っている',
-      'お互い感情的',
-      '既読無視されている',
-      '未読のまま',
-      '会話が止まっている',
-      'さっき電話で揉めた',
-      '今から返信したい',
-    ];
+    final statuses = _statusOptionsForDraft(draft);
 
     return ConsultationScaffold(
       currentStep: 4,
-      title: '今はどんな状態ですか？',
-      subtitle: 'いちばん近いものを選んでください',
-      meta: 'テーマ: ${draft.theme}',
+      title: _statusTitleForDraft(draft),
+      subtitle: _statusSubtitleForDraft(draft),
+      meta: _draftMetaLabel(draft, fallback: 'テーマ: ${draft.theme}'),
       child: Expanded(
         child: ListView.separated(
           itemCount: statuses.length,
@@ -3430,7 +4030,7 @@ class EmotionLevelScreen extends StatelessWidget {
       currentStep: 5,
       title: '今の感情の強さはどれくらいですか？',
       subtitle: '今の自分にいちばん近いものを選んでください',
-      meta: 'Q3: ${draft.currentStatus}',
+      meta: '状態: ${draft.currentStatus}',
       child: Expanded(
         child: ListView.separated(
           itemCount: emotionLevels.length,
@@ -3464,20 +4064,13 @@ class GoalScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const goals = [
-      '謝りたい',
-      '誤解を解きたい',
-      '落ち着かせたい',
-      '仲直りしたい',
-      '距離を置きたい',
-      '相手の気持ちを知りたい',
-    ];
+    final goals = _goalOptionsForDraft(draft);
 
     return ConsultationScaffold(
       currentStep: 6,
-      title: '今回どうしたいですか？',
-      subtitle: '今いちばん近い目的を選んでください',
-      meta: 'Q3.5: ${draft.emotionLevel}',
+      title: _goalTitleForDraft(draft),
+      subtitle: _goalSubtitleForDraft(draft),
+      meta: _draftMetaLabel(draft, fallback: '感情: ${draft.emotionLevel}'),
       child: Expanded(
         child: ListView.separated(
           itemCount: goals.length,
@@ -4693,8 +5286,15 @@ class ResultScreen extends StatelessWidget {
             if (draft.selectedProfile != null)
               _ResultCard(
                 title: '適用したプロフィール',
-                child: Text(
-                  '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                    ),
+                    const SizedBox(height: 12),
+                    buildProfileTypeSummaryWidget(draft.selectedProfile!),
+                  ],
                 ),
               ),
             if (draft.relationLabel != null || draft.relationDetails.isNotEmpty)
@@ -4844,8 +5444,15 @@ class PrecheckResultScreen extends StatelessWidget {
             if (draft.selectedProfile != null)
               _ResultCard(
                 title: '適用したプロフィール',
-                child: Text(
-                  '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${draft.selectedProfile!.displayName} / ${draft.selectedProfile!.relationLabel}',
+                    ),
+                    const SizedBox(height: 12),
+                    buildProfileTypeSummaryWidget(draft.selectedProfile!),
+                  ],
                 ),
               ),
             if (draft.relationLabel != null || draft.relationDetails.isNotEmpty)
