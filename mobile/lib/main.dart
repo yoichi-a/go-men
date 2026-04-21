@@ -4008,6 +4008,186 @@ class CurrentStatusScreen extends StatelessWidget {
   }
 }
 
+String _emotionTitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '今の感情はどれに近いですか？';
+    case '連絡頻度':
+      return '連絡の件で今の心の状態は？';
+    case '言い方がきつい':
+      return '今の傷つきやイライラはどれくらいですか？';
+    case '約束':
+      return '約束の件で今の感情はどれに近いですか？';
+    case 'お金':
+      return 'お金の件で今どれくらい感情が動いていますか？';
+    case '距離感':
+      return '距離感の件で今の気持ちはどれに近いですか？';
+    case '価値観の違い':
+      return '価値観のズレに対して今の気持ちは？';
+    default:
+      return '今の感情の強さはどれくらいですか？';
+  }
+}
+
+String _emotionSubtitleForDraft(ConsultationDraft draft) {
+  switch (draft.theme) {
+    case '嫉妬':
+      return '不安なのか、怒りなのか、今送ると荒れそうなのかで選んでください';
+    case '連絡頻度':
+      return 'まだ待てるか、かなり不安か、今送ると重くなりそうかで選んでください';
+    case '言い方がきつい':
+      return '冷静さが残っているか、かなり刺さっているかで選んでください';
+    case '約束':
+      return '悲しさ・怒り・申し訳なさの強さに近いものを選んでください';
+    case 'お金':
+      return '事実確認モードか、感情が強くなっているかで選んでください';
+    default:
+      return '今の自分にいちばん近いものを選んでください';
+  }
+}
+
+List<String> _emotionOptionsForDraft(ConsultationDraft draft) {
+  final theme = draft.theme ?? '';
+  final bundle = draft.themeAnswers.join(' / ');
+
+  if (theme == '嫉妬') {
+    if (bundle.contains('相手') && bundle.contains('嫉妬')) {
+      return const [
+        'まだ冷静に安心させる言い方を考えられる',
+        '少ししんどいが落ち着いて返せそう',
+        '相手に疑われてかなりしんどい',
+        '今返すと反発してしまいそう',
+      ];
+    }
+    return const [
+      'まだ落ち着いて不安を整理できる',
+      '少し不安が強くなっている',
+      'かなりモヤモヤして感情が動いている',
+      '今送ると責める言い方になりそう',
+    ];
+  }
+
+  if (theme == '連絡頻度') {
+    if (bundle.contains('未読')) {
+      return const ['まだ少し待てそう', '気になって落ち着かない', 'かなり不安でつらい', '今送ると追い連絡が重くなりそう'];
+    }
+    if (bundle.contains('既読')) {
+      return const [
+        'まだ冷静に様子を見られる',
+        '既読後の沈黙が少しつらい',
+        'かなりしんどくて考えすぎてしまう',
+        '今送ると圧のある文になりそう',
+      ];
+    }
+    return const ['まだ落ち着いて考えられる', '少し寂しさや不安がある', 'かなり温度差がつらい', '今送ると重くなりそう'];
+  }
+
+  if (theme == '言い方がきつい') {
+    if (bundle.contains('自分がきつく言ってしまった') ||
+        (bundle.contains('自分') && bundle.contains('きつ'))) {
+      return const [
+        'すぐ謝れるくらいには落ち着いている',
+        '少し気まずくて焦っている',
+        'かなり自己嫌悪や不安が強い',
+        '今送ると弁解が多くなりそう',
+      ];
+    }
+    return const [
+      '冷静に言い直しを考えられる',
+      '傷つきがまだ残っている',
+      'かなりイライラ・悲しさが強い',
+      '今返すと刺々しくなりそう',
+    ];
+  }
+
+  if (theme == '約束') {
+    if (bundle.contains('自分') && !bundle.contains('お互い')) {
+      return const [
+        '落ち着いて謝れそう',
+        '少し焦りや申し訳なさがある',
+        'かなり気まずくてしんどい',
+        '今送ると弁解っぽくなりそう',
+      ];
+    }
+    return const ['まだ冷静に話せそう', '少し悲しい・モヤモヤする', 'かなり怒りや失望が強い', '今送ると責めすぎそう'];
+  }
+
+  if (theme == 'お金') {
+    return const [
+      '事実確認を冷静にできそう',
+      '少し不公平感が気になっている',
+      'かなりモヤモヤや怒りが強い',
+      '今送るときつくなりそう',
+    ];
+  }
+
+  if (theme == '距離感') {
+    return const [
+      '落ち着いて距離の話ができそう',
+      '少し息苦しさ・寂しさがある',
+      'かなりしんどくて余裕がない',
+      '今送ると重い・突き放す感じになりそう',
+    ];
+  }
+
+  if (theme == '価値観の違い') {
+    return const [
+      '違いとして冷静に見られる',
+      '少し引っかかりが残っている',
+      'かなりしんどくて受け流せない',
+      '今話すと平行線で荒れそう',
+    ];
+  }
+
+  if (theme == '家事' || theme == '家のこと' || theme == '家のこと・役割分担') {
+    return const ['冷静に相談できそう', '少しイライラが溜まっている', 'かなり不満が爆発しそう', '今言うと責め口調になりそう'];
+  }
+
+  if (theme == '親の介入') {
+    return const [
+      '落ち着いて線引きの話ができそう',
+      '少ししんどいがまだ整えられる',
+      'かなりストレスが強い',
+      '今話すと一気に荒れそう',
+    ];
+  }
+
+  if (theme == '人間関係・温度差') {
+    return const ['落ち着いて受け止められる', '少し寂しさがある', 'かなり温度差がつらい', '今送ると重くなりそう'];
+  }
+
+  if (theme == '行事・付き合い') {
+    return const ['穏やかに相談できそう', '少し負担感がある', 'かなりうんざりしている', '今言うと角が立ちそう'];
+  }
+
+  if (theme == '生活や子育てへの口出し') {
+    return const ['まだ冷静に話せそう', '少ししんどさが溜まっている', 'かなり限界に近い', '今返すときつくなりそう'];
+  }
+
+  if (theme == 'パートナー経由の伝わり方') {
+    return const ['落ち着いて整理できそう', '少しモヤモヤしている', 'かなり納得いかない', '今言うと責める感じになりそう'];
+  }
+
+  if (theme == '口出し・干渉' || theme == '干渉・信頼' || theme == '信頼されていない感じ') {
+    return const ['まだ穏やかに伝えられそう', '少ししんどさがある', 'かなり窮屈でつらい', '今言うと反発が強く出そう'];
+  }
+
+  if (theme == '比較される') {
+    return const ['冷静に受け止め直せる', '少し傷ついている', 'かなり刺さってつらい', '今返すと感情的になりそう'];
+  }
+
+  if (theme == '親を挟んだ揉めごと') {
+    return const [
+      'まだ順番を整理して考えられる',
+      '少し混乱している',
+      'かなりしんどくて余裕がない',
+      '今動くとさらにこじれそう',
+    ];
+  }
+
+  return const ['落ち着いている', '少ししんどい', 'かなり感情的', '今送ると悪化しそう'];
+}
+
 class EmotionLevelScreen extends StatelessWidget {
   const EmotionLevelScreen({super.key, required this.draft});
 
@@ -4024,12 +4204,12 @@ class EmotionLevelScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const emotionLevels = ['落ち着いている', '少ししんどい', 'かなり感情的', '今送ると悪化しそう'];
+    final emotionLevels = _emotionOptionsForDraft(draft);
 
     return ConsultationScaffold(
       currentStep: 5,
-      title: '今の感情の強さはどれくらいですか？',
-      subtitle: '今の自分にいちばん近いものを選んでください',
+      title: _emotionTitleForDraft(draft),
+      subtitle: _emotionSubtitleForDraft(draft),
       meta: '状態: ${draft.currentStatus}',
       child: Expanded(
         child: ListView.separated(
