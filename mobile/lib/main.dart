@@ -3453,6 +3453,146 @@ List<String> _statusOptionsForDraft(ConsultationDraft draft) {
   final a3 = _draftAnswer(draft, 2);
   final bundle = '$a1 / $a2 / $a3';
 
+  if (relationType == 'couple' && theme == 'お金') {
+    return const [
+      'デート代や生活費の負担に不公平感がある',
+      '貸し借りや立替の話が止まっている',
+      '金額より扱われ方が雑に感じてつらい',
+      'お金の話を出すと空気が悪くなりそう',
+      '将来のお金の感覚まで不安になっている',
+      'まず事実だけ整理したい',
+      '感情を乗せすぎず話したい',
+      '今日はぶつからない形にしたい',
+    ];
+  }
+
+  if (relationType == 'couple' && theme == '距離感') {
+    return const [
+      '会いたい頻度にズレがある',
+      '一人時間の取り方でモヤモヤしている',
+      '近すぎて息苦しい',
+      '遠すぎて不安になっている',
+      '重いと思われそうで本音を言えていない',
+      '関わり方を相談したい',
+      '少し距離を置いて整えたい',
+      '今は柔らかく伝えたい',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == 'お金') {
+    return const [
+      '立替や割り勘が曖昧なままになっている',
+      '催促したいが関係が気まずくなりそう',
+      '少額でもモヤモヤが残っている',
+      '金額より誠実さの問題に感じる',
+      '一度話したが流れてしまった',
+      'まず事実だけ確認したい',
+      '友情を壊さずに伝えたい',
+      '今日は強く出ない方がよさそう',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == '距離感') {
+    return const [
+      'こちらばかり誘っている感じがする',
+      '急に距離を置かれて不安になっている',
+      '近すぎてしんどいが切り出しづらい',
+      '相手の優先順位が下がったようで寂しい',
+      '期待値のズレが積み重なっている',
+      '軽く整えたい',
+      '少し引いて様子を見たい',
+      '今は本音を柔らかく伝えたい',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == '価値観の違い') {
+    return const [
+      'ノリや常識のズレがしんどい',
+      '悪気はなさそうだが合わなさを感じる',
+      '話すと面倒な人と思われそうで言いにくい',
+      '合わせ続けるのがしんどい',
+      '関係を切るほどではないが疲れている',
+      '違いとして整理したい',
+      '今後の距離感を見直したい',
+      '今は深掘りしない方がよさそう',
+    ];
+  }
+
+  if ((relationType == 'family' ||
+          relationType == 'family_other' ||
+          relationType == 'family_parent_child' ||
+          relationType == 'parent_child' ||
+          relationType == 'family_sibling') &&
+      theme == 'お金') {
+    return const [
+      '家族内のお金の役割が曖昧になっている',
+      '貸し借りや援助の期待が重い',
+      '感謝より当然の空気がつらい',
+      '断ると冷たいと思われそうで苦しい',
+      '昔からの積み重なりがある',
+      'まず条件を整理したい',
+      '感情的にならず線を引きたい',
+      '今日は火を大きくしたくない',
+    ];
+  }
+
+  if ((relationType == 'family' ||
+          relationType == 'family_other' ||
+          relationType == 'family_parent_child' ||
+          relationType == 'parent_child' ||
+          relationType == 'family_sibling') &&
+      (theme == '家のこと' || theme == '家のこと・役割分担')) {
+    return const [
+      '家の負担が片寄っている',
+      '言っても当たり前のように流される',
+      '自分だけが動いている感じがする',
+      '昔からの役割固定がしんどい',
+      '感謝されないことにも疲れている',
+      '分担を見直したい',
+      'まず一部だけでも変えたい',
+      '今は穏やかに切り出したい',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == 'お金') {
+    return const [
+      'お祝い・援助・負担の線引きが曖昧',
+      '家ごとの金銭感覚の差がしんどい',
+      'パートナー経由で話がややこしくなっている',
+      'こちらだけ我慢している感じがある',
+      '今後も続く話で不安が強い',
+      'まずパートナーと整理したい',
+      '角を立てず線引きしたい',
+      '今回は荒立てたくない',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == '行事・付き合い') {
+    return const [
+      '毎回こちらの負担が大きい',
+      '断ると感じが悪いと思われそう',
+      '参加前から気が重い',
+      'パートナーとの温度差もつらい',
+      '相手側に悪気はなさそうで余計言いにくい',
+      'まずパートナーに理解してほしい',
+      '今後の参加ラインを決めたい',
+      '今回は穏便に済ませたい',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == 'パートナー経由の伝わり方') {
+    return const [
+      '自分の意図と違う形で伝わってしまった',
+      'パートナーの言い方で角が立った感じがある',
+      '誰に何をどう伝えるかが曖昧になっている',
+      '直接言うべきか迷っている',
+      'まずパートナーと認識をそろえたい',
+      '責めずに修正したい',
+      '今後の伝え方ルールを決めたい',
+      '今日は広げない方がよさそう',
+    ];
+  }
+
   if (relationType == 'couple' && theme == '嫉妬') {
     if (bundle.contains('相手') && bundle.contains('嫉妬')) {
       return const [
@@ -3748,7 +3888,128 @@ List<String> _statusOptionsForDraft(ConsultationDraft draft) {
 
 List<String> _goalOptionsForDraft(ConsultationDraft draft) {
   final theme = draft.theme ?? '';
+  final relationType = draft.relationType ?? '';
   final bundle = _draftAnswerBundle(draft);
+
+  if (relationType == 'couple' && theme == 'お金') {
+    return const [
+      'お金の話を避けずに整えたい',
+      '不公平感を責めすぎず伝えたい',
+      '立替・返金・負担割合をはっきりさせたい',
+      '将来のお金の感覚をすり合わせたい',
+      'まず空気を悪くしないよう伝えたい',
+      '今日は結論を急がず整理したい',
+    ];
+  }
+
+  if (relationType == 'couple' && theme == '距離感') {
+    return const [
+      '会う頻度や一人時間をすり合わせたい',
+      '重くならずに寂しさを伝えたい',
+      '少し距離を置いて整えたい',
+      '不安にさせず自分の時間も守りたい',
+      '期待値を合わせたい',
+      '関係を壊さず整えたい',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == 'お金') {
+    return const [
+      '友情を壊さずに事実確認したい',
+      '立替や返金の話をはっきりさせたい',
+      '誠実さの問題として穏やかに伝えたい',
+      '今後お金を混ぜない線引きをしたい',
+      '重くしすぎず整えたい',
+      '今日は深追いしないでおきたい',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == '距離感') {
+    return const [
+      '期待値を合わせたい',
+      '寂しさや違和感を軽く伝えたい',
+      '少し距離を置きたい',
+      '一方通行感を整えたい',
+      '今後の関わり方を見直したい',
+      'まず自分の気持ちを整理したい',
+    ];
+  }
+
+  if (relationType == 'friend' && theme == '価値観の違い') {
+    return const [
+      '違いとして整理したい',
+      '合わない所を穏やかに伝えたい',
+      '無理に合わせすぎない形にしたい',
+      '距離感を見直したい',
+      '関係を切らずに軽く整えたい',
+      '今回は深追いしないでおきたい',
+    ];
+  }
+
+  if ((relationType == 'family' ||
+          relationType == 'family_other' ||
+          relationType == 'family_parent_child' ||
+          relationType == 'parent_child' ||
+          relationType == 'family_sibling') &&
+      theme == 'お金') {
+    return const [
+      '家族内のお金の線引きをはっきりさせたい',
+      '感情的にならず条件を整理したい',
+      '当然のように扱われるしんどさを伝えたい',
+      '無理な負担は断れる形にしたい',
+      '今後も揉めにくいルールを決めたい',
+      '今日は火を広げたくない',
+    ];
+  }
+
+  if ((relationType == 'family' ||
+          relationType == 'family_other' ||
+          relationType == 'family_parent_child' ||
+          relationType == 'parent_child' ||
+          relationType == 'family_sibling') &&
+      (theme == '家のこと' || theme == '家のこと・役割分担')) {
+    return const [
+      '負担の偏りを伝えたい',
+      '責めすぎず役割を見直したい',
+      'まず一部だけでも変えたい',
+      '当たり前扱いがつらいことを伝えたい',
+      '続けられる分担にしたい',
+      '今日は穏やかに触れるだけにしたい',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == 'お金') {
+    return const [
+      'まずパートナーと足並みをそろえたい',
+      '家ごとの金銭感覚の差を整理したい',
+      '無理な負担には線を引きたい',
+      '角を立てすぎず伝えたい',
+      '今後の負担ルールを決めたい',
+      '今回は荒立てず整えたい',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == '行事・付き合い') {
+    return const [
+      '無理のない参加ラインを決めたい',
+      'まずパートナーに理解してほしい',
+      '負担感を責めずに伝えたい',
+      '今回は穏便に済ませたい',
+      '今後の線引きを明確にしたい',
+      '自分ばかり我慢しない形にしたい',
+    ];
+  }
+
+  if (relationType == 'family_inlaw' && theme == 'パートナー経由の伝わり方') {
+    return const [
+      'まずパートナーと認識を合わせたい',
+      '自分の意図を正しく伝え直したい',
+      '責めずに伝え方を見直したい',
+      '間接伝達を減らしたい',
+      '今回は火消しを優先したい',
+      '今後の伝え方ルールを決めたい',
+    ];
+  }
 
   if (theme == '嫉妬') {
     if (bundle.contains('相手') && bundle.contains('嫉妬')) {
