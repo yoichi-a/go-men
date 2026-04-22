@@ -647,6 +647,121 @@ def _consult_case_style(request) -> str:
     return " ".join(notes)
 
 
+
+def _compact_case_text(*values: Any) -> str:
+    parts: List[str] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, list):
+            for item in value:
+                s = str(item).strip()
+                if s:
+                    parts.append(s)
+            continue
+        s = str(value).strip()
+        if s:
+            parts.append(s)
+    return "\n".join(parts)
+
+
+def _contains_any(text: str, needles: list[str]) -> bool:
+    lowered = text.lower()
+    return any(str(needle).lower() in lowered for needle in needles)
+
+
+def _consult_case_axis(request) -> str:
+    relation = str(getattr(request, "relation_type", "") or "").strip()
+    theme = str(getattr(request, "theme", "") or "").strip()
+    goal = str(getattr(request, "goal", "") or "").strip()
+
+    details_text = _compact_case_text(
+        getattr(request, "relation_detail_labels", []),
+        getattr(request, "theme_details", []),
+        getattr(request, "current_status", ""),
+        getattr(request, "emotion_level", ""),
+        getattr(request, "goal", ""),
+        getattr(request, "note", ""),
+        getattr(request, "chat_text", ""),
+        getattr(request, "recent_pattern_summary", ""),
+    )
+
+    notes: List[str] = []
+
+    if relation == "couple" and theme == "嫉妬":
+        notes.append("嫉妬では、誰が誰に不安を感じているのかを冒頭で明示してください。")
+        if _contains_any(details_text, ["疑われた", "束縛", "監視", "詮索", "責められた", "嫉妬された"]):
+            notes.append("今回は自分が疑われた・嫉妬された側として整理してください。")
+        elif _contains_any(details_text, ["嫉妬してしまう", "不安", "取られそう", "他の女", "他の男", "女友達", "男友達", "元恋人", "元カレ", "元カノ"]):
+            notes.append("今回は自分が嫉妬して不安になっている側として整理してください。")
+        else:
+            notes.append("主体が不明でも、summary の冒頭で仮の対立軸を自然に言語化してください。")
+        notes.append("嫉妬は恋愛不安・比較不安として扱い、一般的な価値観のズレに薄めないでください。")
+
+    elif relation == "couple" and theme == "連絡頻度":
+        notes.append("連絡頻度では、どちらがより連絡を求めているか、何に傷ついたのかを明示してください。")
+        if _contains_any(details_text, ["返信が遅い", "既読無視", "未読", "そっけない", "回数が少ない"]):
+            notes.append("返信速度や温度差への不安が中心です。")
+        if _contains_any(details_text, ["責めてしまった", "催促", "追いLINE"]):
+            notes.append("すでに責めた後の修復として best_reply を作ってください。")
+        notes.append("send_timing_reason は追撃が重いか、短い確認ならよいかをこのケースに即して書いてください。")
+
+    elif relation == "couple" and theme == "言い方がきつい":
+        notes.append("言い方がきついでは、きつく言った側と傷ついた側を曖昧にしないでください。")
+        if _contains_any(details_text, ["自分がきつく言ってしまった", "言い過ぎた", "責めすぎた"]):
+            notes.append("今回は自分が強く言ってしまった後の修復として整理してください。")
+        elif _contains_any(details_text, ["責められた", "冷たく返された", "馬鹿にされた", "正論で詰められた"]):
+            notes.append("今回は相手の言い方で傷ついた側として整理してください。")
+        notes.append("best_reply は謝罪なのか境界線なのかを goal に合わせて変えてください。")
+
+    elif relation == "couple" and theme == "距離感":
+        notes.append("距離感では、近づきたい側と距離を取りたい側を明示してください。")
+        notes.append("重さ・放置・束縛・温度差のどれが主軸かを summary 冒頭で自然にまとめてください。")
+
+    elif relation == "couple" and theme == "約束":
+        notes.append("約束では、破られた内容だけでなく、軽く扱われた感じや信頼の揺れも拾ってください。")
+        notes.append("best_reply は事実確認だけでなく、今後どう合わせるかまで含めてください。")
+
+    elif relation == "couple" and theme == "お金":
+        notes.append("お金では、金額そのものよりも負担感・公平感・感謝不足・当然視のどれが痛点かを明示してください。")
+        notes.append("summary で単なるお金の話にせず、信頼や配慮のズレまで言語化してください。")
+
+    elif relation.startswith("family") and theme == "パートナー経由の伝わり方":
+        notes.append("家族・義家族の伝わり方では、誰が誰にどう伝えたか、または伝えなかったかを明示してください。")
+        notes.append("パートナーが盾になれていない不満なのか、伝言ゲームで歪んだ不満なのかを分けて扱ってください。")
+
+    elif relation.startswith("family") and theme == "行事・付き合い":
+        notes.append("行事・付き合いでは、参加義務感・温度差・優先順位・断りづらさのどれが中心かを明示してください。")
+        notes.append("best_reply は単なる断り文句ではなく、角を立てずに線引きする形を優先してください。")
+
+    elif relation == "friend" and theme == "人間関係・温度差":
+        notes.append("友人の温度差では、期待していた近さと実際の距離のズレを明示してください。")
+        notes.append("仲直りしたいのか、関係を軽く整えたいのか、自然にフェードしたいのかを goal に沿って分けてください。")
+
+    if "謝りたい" in goal:
+        notes.append("goal は謝罪です。best_reply は説明より先に受け止めと謝意を置いてください。")
+    elif "誤解を解きたい" in goal:
+        notes.append("goal は誤解の修正です。防御的になりすぎず、認識ズレの整理を優先してください。")
+    elif "落ち着かせたい" in goal:
+        notes.append("goal は火消しです。正しさの主張よりも刺激を下げる言い方を優先してください。")
+    elif "仲直りしたい" in goal:
+        notes.append("goal は再接続です。短く安心感を出しつつ、会話の再開余地を残してください。")
+    elif "距離を置きたい" in goal:
+        notes.append("goal は境界線です。曖昧な優しさより、柔らかいがぶれない線引きを優先してください。")
+    elif "相手の気持ちを知りたい" in goal:
+        notes.append("goal は確認です。尋問ではなく、答えやすい開き方を優先してください。")
+
+    if _contains_any(details_text, ["今送ると悪化しそう", "かなり感情的", "お互い感情的", "さっき電話で揉めた"]):
+        notes.append("send_timing は少し置く寄りを基本線にしてください。")
+    elif _contains_any(details_text, ["今から返信したい", "会話が止まっている", "既読無視", "未読のまま"]):
+        notes.append("send_timing は短く送るか少し待つかをケースごとに具体的に書いてください。")
+
+    if not notes:
+        notes.append("summary の1文目で対立軸を名詞化し、best_reply では goal に合う一手を具体化してください。")
+
+    return " ".join(notes)
+
+
 def build_consult_input(request) -> str:
     base = _request_to_prompt_lines(
         request,
@@ -656,21 +771,22 @@ def build_consult_input(request) -> str:
     rules = [
         "[consult_output_rules]",
         "- relation_type / relation_detail_labels / theme / theme_details / current_status / emotion_level / goal を主な判断材料にしてください。",
-        "- chat_text が短い場合や空欄の場合でも、選択された情報から具体的にケースを読み分けてください。",
         f"- この相談で特に重視する観点: {_consult_case_style(request)}",
-        "- summary はこのケース特有の状況整理を1〜2文で書いてください。",
-        "- partner_feeling_estimate は相手がどう受け取ったかを、このケースに即して自然な日本語で書いてください。",
+        f"- この相談の対立軸: {_consult_case_axis(request)}",
+        "- summary の1文目で『誰が・何に・どう困っているか』を、このケースに即してはっきり書いてください。",
+        "- partner_feeling_estimate は、相手が防御的なのか、傷ついたのか、距離を取りたいのかなどをこのケースに沿って自然に書いてください。",
         "- send_timing は短い自然な日本語で返してください。",
-        "- send_timing_reason は、このケースでなぜその判断になるのかを具体的に書いてください。",
-        "- best_reply は title と body を持つオブジェクトで返してください。",
-        "- other_replies は title と body を持つオブジェクトの配列で、2件返してください。",
+        "- send_timing_reason は一般論ではなく、このケースの地雷と空気を踏まえて具体的に書いてください。",
+        "- best_reply は title と body を持つオブジェクトで返してください。body はそのまま送れる自然な日本語にしてください。",
+        "- other_replies は title と body を持つオブジェクトの配列で2件返してください。best_reply とは少し方向性を変えてください。",
         "- heard_as_interpretations は2件、avoid_phrases は2件の自然な日本語配列で返してください。",
         "- next_actions は3件、pre_send_cautions は3件の自然な日本語配列で返してください。",
-        "- 似たケースでも relation_type や goal が違えば、答えも明確に変えてください。",
+        "- chat_text や note が少なくても、選択情報だけでケース固有の出力にしてください。",
+        "- 似たケースでも relation_type / theme / theme_details / current_status / goal の違いで答えを明確に変えてください。",
         "- 16type は補助的な仮説としてのみ使い、決めつけないでください。",
     ]
 
-    return base + "\n\n" + "\n".join(rules)
+    return base + "\\n\\n" + "\\n".join(rules)
 
 
 def build_precheck_prompt(request) -> str:
