@@ -1087,7 +1087,7 @@ def _compose_couple_best_reply(request) -> Optional[str]:
 
         if intent == "align":
             if _consult_has_signal(request, "issue_persisting", "repeated_pattern"):
-                return "約束のすれ違いが繰り返されると、お互いしんどくなる気がしてる。次からは守れそうなことだけ言い合える形にしたい。"
+                return "責めたいわけじゃなくて、約束のすれ違いが続くとお互いしんどいから、次からは守れそうなことをどう決めるか一回落ち着いて話したい。"
             return "約束の受け取り方にズレがあった気がしてる。次からどうしたらお互いに無理なく守れるか、一度すり合わせたい。"
 
         if intent == "boundary":
@@ -1128,7 +1128,7 @@ def _compose_couple_best_reply(request) -> Optional[str]:
                 return "お金のことが続くと、私は少し不公平に感じてしまってしんどい。このまま溜めたくないから、まずはその気持ちだけ伝えさせて。"
             return "お金のことが続くと、私は少し不公平に感じてしまってしんどい。まずはその気持ちだけ伝えさせて。"
 
-        return "お金のこと、私の中で少し引っかかってる。責めたいわけじゃないから、一度落ち着いて話したい。"
+        return "お金のこと、責めたいわけじゃなくて、曖昧なままだと負担感が偏りやすいから、次からは先に確認して、お互い納得できる形を決めたい。"
 
     if theme == "距離感":
         if intent == "align":
@@ -1219,7 +1219,7 @@ def _compose_friend_best_reply(request) -> Optional[str]:
         if intent == "boundary":
             return "お金のことは曖昧にしないで、次からは先に確認して進めたい。"
 
-        return "お金のこと、曖昧なままだとお互い気まずくなりやすいから、一回整理したい。"
+        return "立替やお金のこと、責めたいわけじゃないんだけど、曖昧なままだとお互い気まずくなりやすいから、一回整理したい。"
 
     if theme == "距離感":
         if intent == "clarify":
@@ -1234,6 +1234,20 @@ def _compose_friend_best_reply(request) -> Optional[str]:
 
     return None
 
+
+
+
+def _compose_inlaw_best_reply(request) -> Optional[str]:
+    theme = str(getattr(request, "theme", "") or "").strip()
+    labels = getattr(request, "relation_detail_labels", []) or []
+    joined_labels = " ".join(str(x) for x in labels if x)
+
+    if theme == "行事・付き合い":
+        if "義父" in joined_labels:
+            return "いつも気にかけていただいてありがとうございます。毎回参加するのは少し難しいので、今後は都合を見ながら無理のない範囲で参加できれば助かります。参加できるときはぜひ伺いたいです。"
+        return "いつも気にかけてくださってありがとうございます。毎回参加するのは少し難しいので、今後は都合を見ながら無理のない範囲で参加させていただけると助かります。参加できるときはぜひ伺いたいです。"
+
+    return None
 
 def _compose_family_best_reply(request) -> Optional[str]:
     relation = _request_str_attr(request, "relation_type")
@@ -1278,17 +1292,71 @@ def _compose_family_best_reply(request) -> Optional[str]:
 
 def _compose_relation_best_reply(request) -> Optional[str]:
     relation = _request_str_attr(request, "relation_type")
+    theme = _request_str_attr(request, "theme")
+
+    if theme == "約束":
+        if relation == "couple":
+            return "この前の約束のこと、少し引っかかってる。責めたいわけじゃなくて、どういう事情だったのか知りたいし、次からはどうするか一回ちゃんと話したい。"
+        if relation == "friend":
+            return "この前の約束のこと、少し引っかかってた。責めたいわけじゃないから、どういう感じだったのか聞けると助かる。次から気まずくならない形にしたい。"
+        if relation == "family":
+            return "この前の約束のこと、少し引っかかってる。責めたいわけじゃなくて、事情は聞きたいし、次からどうするかは一回ちゃんと決めたい。"
 
     if relation == "couple":
         return _compose_couple_best_reply(request)
-
     if relation == "friend":
         return _compose_friend_best_reply(request)
-
-    if relation.startswith("family") or relation == "parent_child":
+    if relation == "family":
         return _compose_family_best_reply(request)
+    if relation == "inlaw":
+        return _compose_inlaw_best_reply(request)
 
     return None
+
+
+
+def _soften_high_emotion_reply(request, body: str) -> str:
+    relation = str(getattr(request, "relation_type", "") or "").strip()
+    theme = str(getattr(request, "theme", "") or "").strip()
+    emotion = str(getattr(request, "emotion_level", "") or "").strip()
+    status = str(getattr(request, "current_status", "") or "").strip()
+    labels = " ".join(getattr(request, "relation_detail_labels", []) or [])
+
+    is_hot = (
+        emotion in {"少し感情的", "かなり感情的", "爆発しそう"}
+        or "こじれ" in status
+        or "気まず" in status
+    )
+    if not is_hot:
+        return body
+
+    if any(s in body for s in [
+        "責めたいわけじゃ",
+        "責めるつもりは",
+        "感情的に責めたいわけじゃ",
+        "気まずくしたいわけじゃ",
+        "今すぐ返事じゃなくて大丈夫",
+        "ありがとうございます",
+        "ありがたいのですが",
+    ]):
+        return body
+
+    if relation == "couple" and theme == "連絡頻度":
+        return "責めたいわけじゃないんだけど、" + body
+
+    if relation == "couple" and theme == "約束":
+        return "感情的に責めたいわけじゃなくて、" + body
+
+    if relation == "couple" and theme == "お金":
+        return "責めたいわけじゃなくて、今後こじれないように、" + body
+
+    if relation == "friend" and theme == "お金":
+        return "気まずくしたいわけじゃなくて、" + body
+
+    if theme == "行事・付き合い" and ("義" in labels or relation == "family"):
+        return "いつも気にかけていただけるのはありがたいのですが、" + body
+
+    return body
 
 
 def _set_primary_reply(normalized: dict, body: str) -> dict:
@@ -1320,10 +1388,75 @@ def _set_primary_reply(normalized: dict, body: str) -> dict:
     return normalized
 
 
+
+
+def _polish_relation_reply(request, body: str) -> str:
+    relation = _request_str_attr(request, "relation_type")
+    theme = _request_str_attr(request, "theme")
+
+    relation_labels = []
+    try:
+        relation_labels = list(getattr(request, "relation_detail_labels", []) or [])
+    except Exception:
+        relation_labels = []
+
+    relation_labels_text = " ".join(str(x) for x in relation_labels)
+    is_inlaw = (
+        relation == "inlaw"
+        or "義母" in relation_labels_text
+        or "義父" in relation_labels_text
+        or "義家族" in relation_labels_text
+        or "義実家" in relation_labels_text
+    )
+
+    if relation == "couple" and theme == "お金":
+        if "お金のことは曖昧だと負担感が偏りやすい" in body:
+            return "お金のこと、責めたいわけじゃなくて、曖昧なままだと負担感が偏りやすいから、次からは先に確認して、お互い納得できる形を決めたい。"
+
+    if relation == "friend" and theme == "お金":
+        if "曖昧なままだとお互い気まずくなりやすい" in body:
+            return "立替やお金のこと、責めたいわけじゃないんだけど、曖昧なままだとお互い気まずくなりやすいから、一回整理したい。"
+
+    if is_inlaw and theme == "行事・付き合い":
+        return "いつも気にかけてくださってありがとうございます。毎回参加するのは少し難しいので、今後は都合を見ながら無理のない範囲で参加させていただけると助かります。参加できるときはぜひ伺いたいです。"
+
+    if "いつも気にかけていただけるのはありがたいのですが、行事のこと、気持ちは分かるけど今の私たちの負担もあるから、無理のない関わり方を一度すり合わせたい。" in body:
+        return "いつも気にかけてくださってありがとうございます。毎回参加するのは少し難しいので、今後は都合を見ながら無理のない範囲で参加させていただけると助かります。参加できるときはぜひ伺いたいです。"
+
+    return body
+
+
+
+def _compress_overlong_reply(request, body: str) -> str:
+    relation = _request_str_attr(request, "relation_type")
+    theme = _request_str_attr(request, "theme")
+
+    if relation == "couple" and theme == "連絡頻度":
+        if "最近ちょっと連絡が少なくて" in body and "話せる範囲で教えてもらえると嬉しい" in body:
+            return "最近ちょっと連絡が少なくて不安になってた。責めたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると嬉しい。"
+
+    if relation == "family" and theme == "お金":
+        if "今後は誰が何をどこまで負担するかを一度きちんと決めたい" in body:
+            return "お金のこと、このまま曖昧だと自分の負担が偏る感じがして気になってる。責めたいわけじゃなくて、今後の分担を一度ちゃんと決めたい。"
+
+    if relation == "family" and theme == "言い方がきつい":
+        if "強い言い方だとこちらもきつくなる" in body:
+            return "さっきの言い方は少ししんどかった。責めたいわけじゃないけど、もう少し落ち着いて話せると助かる。"
+
+    if relation == "friend" and theme == "連絡頻度":
+        if "最近ちょっと連絡のテンポが変わって" in body:
+            return "最近ちょっと連絡のテンポが変わって気になってた。責めたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると助かる。"
+
+    return body
+
+
 def _apply_consult_reply_composer(request, normalized: dict) -> dict:
     body = _compose_relation_best_reply(request)
     if not body:
         return normalized
+    body = _soften_high_emotion_reply(request, body)
+    body = _polish_relation_reply(request, body)
+    body = _compress_overlong_reply(request, body)
     return _set_primary_reply(normalized, body)
     if not body:
         return normalized
@@ -1395,6 +1528,196 @@ def compatibility_score(request: CompatibilityRequest):
         raise HTTPException(status_code=500, detail=f"OpenAI compatibility error: {e}")
 
 
+# === go-men consult reply composer bundle ===
+
+def _gm_nonempty(*values: Any) -> str:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str):
+            s = value.strip()
+        else:
+            s = str(value).strip()
+        if s:
+            return s
+    return ""
+
+
+def _gm_relation(request) -> str:
+    return str(getattr(request, "relation_type", "") or "").strip().lower()
+
+
+def _gm_theme(request) -> str:
+    return str(getattr(request, "theme", "") or "").strip()
+
+
+def _gm_blob(request) -> str:
+    parts = [
+        getattr(request, "chat_text", ""),
+        getattr(request, "note", ""),
+        getattr(request, "recent_pattern_summary", ""),
+        " ".join(getattr(request, "theme_details", []) or []),
+        " ".join(getattr(request, "relation_detail_labels", []) or []),
+        str(getattr(request, "goal", "") or ""),
+        str(getattr(request, "current_status", "") or ""),
+    ]
+    return " ".join(str(part).strip() for part in parts if str(part).strip())
+
+
+def _gm_has_repeat(request) -> bool:
+    blob = _gm_blob(request)
+    markers = ["前にも", "また", "何度か", "繰り返", "毎回", "いつも", "再び"]
+    return any(marker in blob for marker in markers)
+
+
+def _gm_set_primary_reply(normalized: dict, body: str, title: str = "おすすめ返信") -> dict:
+    body = str(body or "").strip()
+    if not body:
+        return normalized
+
+    reply_options = normalized.get("reply_options")
+    if not isinstance(reply_options, list):
+        reply_options = []
+        normalized["reply_options"] = reply_options
+
+    item = {"title": title, "body": body}
+
+    if reply_options:
+        if isinstance(reply_options[0], dict):
+            merged = dict(reply_options[0])
+            merged.update(item)
+            reply_options[0] = merged
+        else:
+            reply_options[0] = item
+    else:
+        reply_options.append(item)
+
+    if isinstance(normalized.get("best_reply"), dict):
+        normalized["best_reply"]["title"] = title
+        normalized["best_reply"]["body"] = body
+
+    return normalized
+
+
+def _gm_compose_couple_best_reply(request) -> Optional[str]:
+    theme = _gm_theme(request)
+
+    if theme == "連絡頻度":
+        return "最近ちょっと連絡が少なくて不安になってた。責めたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると嬉しい。"
+
+    if theme == "お金":
+        return "お金のこと、責めたいわけじゃなくて、曖昧なままだと負担感が偏りやすいから、次からは先に確認して、お互い納得できる形を決めたい。"
+
+    if theme == "約束":
+        if _gm_has_repeat(request):
+            return "この前の約束のこと、少し引っかかってる。責めたいわけじゃなくて、どういう事情だったのか知りたいし、次からはどうするか一回ちゃんと話したい。"
+        return "この前の約束のこと、少し引っかかってる。責めたいわけじゃないから、どういう事情だったのか知りたい。次から気まずくならない形を一回話したい。"
+
+    return None
+
+
+def _gm_compose_friend_best_reply(request) -> Optional[str]:
+    theme = _gm_theme(request)
+
+    if theme == "連絡頻度":
+        return "最近ちょっと連絡のテンポが変わって気になってた。責めたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると助かる。"
+
+    if theme == "お金":
+        return "立替やお金のこと、責めたいわけじゃないんだけど、曖昧なままだとお互い気まずくなりやすいから、一回整理したい。"
+
+    if theme == "約束":
+        return "この前の約束のこと、少し引っかかってた。責めたいわけじゃないから、どういう感じだったのか聞けると助かる。次から気まずくならない形にしたい。"
+
+    return None
+
+
+def _gm_compose_family_best_reply(request) -> Optional[str]:
+    theme = _gm_theme(request)
+
+    if theme == "言い方がきつい":
+        return "さっきの言い方は少ししんどかった。責めたいわけじゃないけど、もう少し落ち着いて話せると助かる。"
+
+    if theme == "お金":
+        return "お金のこと、このまま曖昧だと自分の負担が偏る感じがして気になってる。責めたいわけじゃなくて、今後の分担を一度ちゃんと決めたい。"
+
+    if theme == "約束":
+        return "この前の約束のこと、少し引っかかってる。責めたいわけじゃなくて、事情は聞きたいし、次からどうするかは一回ちゃんと決めたい。"
+
+    return None
+
+
+def _gm_compose_inlaw_best_reply(request) -> Optional[str]:
+    theme = _gm_theme(request)
+
+    if theme == "行事・付き合い":
+        return "いつも気にかけてくださってありがとうございます。毎回参加するのは少し難しいので、今後は都合を見ながら無理のない範囲で参加させていただけると助かります。参加できるときはぜひ伺いたいです。"
+
+    return None
+
+
+def _gm_compose_relation_best_reply(request) -> Optional[str]:
+    relation = _gm_relation(request)
+    labels = " ".join(getattr(request, "relation_detail_labels", []) or [])
+
+    if relation.startswith("couple"):
+        return _gm_compose_couple_best_reply(request)
+
+    if relation.startswith("friend"):
+        return _gm_compose_friend_best_reply(request)
+
+    if relation.startswith("family") or relation == "parent_child":
+        return _gm_compose_family_best_reply(request)
+
+    if relation.startswith("inlaw") or "義" in labels:
+        return _gm_compose_inlaw_best_reply(request)
+
+    return None
+
+
+def _gm_polish_relation_reply(request, body: str) -> str:
+    body = " ".join(str(body or "").strip().split())
+    if not body:
+        return body
+
+    while "。。" in body:
+        body = body.replace("。。", "。")
+
+    body = body.replace(
+        "責めたいわけじゃないんだけど、責めたいわけじゃないんだけど、",
+        "責めたいわけじゃないんだけど、",
+    )
+    body = body.replace(
+        "責めたいわけじゃなくて、責めたいわけじゃなくて、",
+        "責めたいわけじゃなくて、",
+    )
+
+    return body
+
+
+def _gm_apply_consult_reply_composer(request, normalized: dict) -> dict:
+    if not isinstance(normalized, dict):
+        return normalized
+
+    body = _gm_compose_relation_best_reply(request)
+
+    if not body:
+        reply_options = normalized.get("reply_options")
+        if isinstance(reply_options, list) and reply_options and isinstance(reply_options[0], dict):
+            body = _gm_nonempty(reply_options[0].get("body"))
+
+    body = _gm_polish_relation_reply(request, body)
+    if not body:
+        return normalized
+
+    relation = _gm_relation(request)
+    title = "おすすめ返信"
+    if relation.startswith("inlaw"):
+        title = "やわらかく伝える"
+    elif relation.startswith("family") or relation == "parent_child":
+        title = "落ち着いて伝える"
+
+    return _gm_set_primary_reply(normalized, body, title)
+
 @app.post("/consult/sessions")
 def create_consult_session(request: ConsultSessionRequest):
     if client is None:
@@ -1436,7 +1759,7 @@ def create_consult_session(request: ConsultSessionRequest):
         result_text = response.output_text
         result_json = parse_json_text(result_text)
         normalized = normalize_consult_result(result_json)
-        normalized = _apply_consult_reply_composer(request, normalized)
+        normalized = _gm_apply_consult_reply_composer(request, normalized)
         return {"data": normalized}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI consult error: {e}")
