@@ -29,8 +29,8 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PAGES_DIR = PROJECT_ROOT / "pages"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+PAGES_DIR = BACKEND_ROOT / "pages"
 
 @app.get("/privacy_policy.html", include_in_schema=False)
 def privacy_policy_html():
