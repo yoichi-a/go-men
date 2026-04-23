@@ -628,8 +628,24 @@ def _request_text_attr(request, name: str) -> str:
 
 
 
+def _canonical_relation_type(value: str) -> str:
+    relation = str(value or "").strip()
+
+    if relation == "family_inlaw":
+        return "inlaw"
+
+    if relation in {"family_parent_child", "parent_child", "family_other"}:
+        return "family"
+
+    return relation
+
+
 def _request_str_attr(request, name: str) -> str:
-    value = getattr(request, name, "")
+    value = str(getattr(request, name, "") or "").strip()
+    if name == "relation_type":
+        return _canonical_relation_type(value)
+    return value
+
     if value is None:
         return ""
     return str(value).strip()
@@ -682,7 +698,7 @@ def _consult_semantic_focus(request) -> str:
     return " ".join(notes)
 
 def _consult_case_style(request) -> str:
-    relation = str(getattr(request, "relation_type", "")).strip()
+    relation = _request_str_attr(request, "relation_type")
     theme = str(getattr(request, "theme", "")).strip()
     current_status = str(getattr(request, "current_status", "")).strip()
     emotion_level = str(getattr(request, "emotion_level", "")).strip()
@@ -752,7 +768,7 @@ def _contains_any(text: str, needles: list[str]) -> bool:
 
 
 def _consult_case_axis(request) -> str:
-    relation = str(getattr(request, "relation_type", "") or "").strip()
+    relation = _request_str_attr(request, "relation_type")
     theme = str(getattr(request, "theme", "") or "").strip()
     goal = str(getattr(request, "goal", "") or "").strip()
 
@@ -1316,7 +1332,7 @@ def _compose_relation_best_reply(request) -> Optional[str]:
 
 
 def _soften_high_emotion_reply(request, body: str) -> str:
-    relation = str(getattr(request, "relation_type", "") or "").strip()
+    relation = _request_str_attr(request, "relation_type")
     theme = str(getattr(request, "theme", "") or "").strip()
     emotion = str(getattr(request, "emotion_level", "") or "").strip()
     status = str(getattr(request, "current_status", "") or "").strip()
@@ -1544,7 +1560,7 @@ def _gm_nonempty(*values: Any) -> str:
 
 
 def _gm_relation(request) -> str:
-    return str(getattr(request, "relation_type", "") or "").strip().lower()
+    return _request_str_attr(request, "relation_type").lower()
 
 
 def _gm_theme(request) -> str:

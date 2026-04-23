@@ -5654,6 +5654,22 @@ class _NoteScreenState extends State<NoteScreen> {
   }
 }
 
+String _canonicalRelationType(String value) {
+  final relation = value.trim();
+
+  if (relation == 'family_inlaw') {
+    return 'inlaw';
+  }
+
+  if (relation == 'family_parent_child' ||
+      relation == 'parent_child' ||
+      relation == 'family_other') {
+    return 'family';
+  }
+
+  return relation;
+}
+
 class AnalyzeScreen extends StatefulWidget {
   const AnalyzeScreen({super.key, required this.draft});
 
@@ -5693,7 +5709,7 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'relation_type': widget.draft.relationType,
+          'relation_type': _canonicalRelationType(widget.draft.relationType ?? ''),
           'relation_detail_labels': widget.draft.relationDetails,
           'theme': widget.draft.theme,
           'theme_details': widget.draft.themeAnswers,
@@ -6381,7 +6397,7 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'relation_type': widget.draft.relationType,
+          'relation_type': _canonicalRelationType(widget.draft.relationType ?? ''),
           'relation_detail_labels': widget.draft.relationDetails,
           'draft_message': widget.draft.draftMessage,
           'optional_context_text': widget.draft.optionalContextText,
