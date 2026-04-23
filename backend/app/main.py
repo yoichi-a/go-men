@@ -30,7 +30,25 @@ client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-PAGES_DIR = BACKEND_ROOT / "pages"
+
+APP_FILE = Path(__file__).resolve()
+PROJECT_ROOT = APP_FILE.parents[2]
+
+PAGES_DIR_CANDIDATES = [
+    PROJECT_ROOT / "pages",
+    PROJECT_ROOT / "backend" / "pages",
+    APP_FILE.parents[1] / "pages",
+    Path("/opt/render/project/src/pages"),
+    Path("/opt/render/project/src/backend/pages"),
+]
+
+def resolve_pages_dir() -> Path:
+    for candidate in PAGES_DIR_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return PROJECT_ROOT / "backend" / "pages"
+
+PAGES_DIR = resolve_pages_dir()
 
 @app.get("/privacy_policy.html", include_in_schema=False)
 def privacy_policy_html():
@@ -44,6 +62,13 @@ def support_html():
     page = PAGES_DIR / "support.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="support.html not found")
+    return FileResponse(page)
+
+@app.get("/terms.html", include_in_schema=False)
+def terms_html():
+    page = PAGES_DIR / "terms.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="terms.html not found")
     return FileResponse(page)
 
 @app.get("/")
