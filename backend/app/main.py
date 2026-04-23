@@ -984,6 +984,25 @@ def _consult_goal_intent(request) -> str:
     return ""
 
 
+
+
+def _consult_has_any_key_suffix(request, *suffixes: str) -> bool:
+    keys: List[str] = []
+
+    for value in getattr(request, "theme_detail_keys", []) or []:
+        if value:
+            keys.append(str(value).strip())
+
+    for value in [
+        getattr(request, "current_status_key", ""),
+        getattr(request, "goal_key", ""),
+    ]:
+        if value:
+            keys.append(str(value).strip())
+
+    return any(any(key.endswith(suffix) for suffix in suffixes) for key in keys)
+
+
 def _compose_couple_best_reply(request) -> Optional[str]:
     relation = _request_text_attr(request, "relation_type")
     theme = _request_text_attr(request, "theme")
@@ -1146,8 +1165,134 @@ def _compose_couple_best_reply(request) -> Optional[str]:
 
 
 
+
+
+def _compose_friend_best_reply(request) -> Optional[str]:
+    theme = str(getattr(request, "theme", "")).strip()
+    status = str(getattr(request, "current_status", "")).strip()
+    intent = _consult_goal_intent(request)
+
+    if theme == "連絡頻度":
+        if intent == "clarify":
+            if _consult_has_signal(request, "active_conflict", "ongoing_strain", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "さっきは言い方がきつくなってたらごめん。責めたいわけじゃなくて、最近ちょっと連絡のテンポが変わって気になってた。落ち着いた時に、今どんな感じか教えてもらえると助かる。"
+            if _consult_has_signal(request, "seen_no_reply", "response_absence", "contact_anxiety", "uncertainty_high") or _consult_has_any_key_suffix(request, "|q1|o2", "|q2|o1"):
+                return "最近ちょっと連絡のテンポが変わって、少し気になってた。責めたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると助かる。"
+            return "最近ちょっと連絡のテンポが変わって、少し気になってた。無理に聞きたいわけじゃないから、落ち着いた時に今どんな感じか教えてもらえると助かる。"
+
+        if intent in {"reconcile", "repair"}:
+            return "変に気まずくしたいわけじゃないから、落ち着いた時に少しだけ話せたらうれしい。"
+
+        if intent == "boundary":
+            return "今すぐ返事がほしいわけじゃないから、落ち着いた頃に連絡もらえたら助かる。"
+
+        return "最近ちょっと連絡のテンポが変わって気になってた。急ぎじゃないから、落ち着いた時に少し話せたらうれしい。"
+
+    if theme == "言い方がきつい":
+        if intent in {"calm", "reconcile", "repair"}:
+            if _consult_has_signal(request, "tone_hurt", "issue_persisting", "repeated_pattern") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "さっきはお互い少し強くなってたかもしれない。責め合いたいわけじゃないから、もう少し落ち着いて話せたらありがたい。"
+            return "ちょっと言い方が強く感じて気になってた。責めたいわけじゃないから、落ち着いて話せると助かる。"
+
+        if intent == "clarify":
+            return "さっきの言い方が少し強く聞こえて、ちょっと気になってた。どういう意図だったか、落ち着いた時に聞けると助かる。"
+
+        return "ちょっと強く聞こえた部分があって気になってた。責めたいわけじゃないから、落ち着いて話せるとありがたい。"
+
+    if theme == "約束":
+        if intent in {"clarify", "reconcile", "repair"}:
+            if _consult_has_signal(request, "issue_persisting", "repeated_pattern") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "約束のこと、私の中で少し引っかかってる。責めたいわけじゃなくて、何がずれてたのか一回整理したい。"
+            return "約束のこと、少し気になってた。責めたいわけじゃないから、何がずれてたのか落ち着いて整理できたらうれしい。"
+
+        if intent == "boundary":
+            return "次からは曖昧にならないように、約束の確認だけ先にしておきたい。"
+
+        return "約束のこと、少し引っかかってた。責めたいわけじゃないから、一回整理できたら助かる。"
+
+    if theme == "お金":
+        if intent in {"clarify", "reconcile", "repair"}:
+            if _consult_has_signal(request, "unfairness", "burden_imbalance", "issue_persisting"):
+                return "お金のこと、私の中で少し引っかかってる。責めたいわけじゃなくて、次から気まずくならない形を一回すり合わせたい。"
+            return "お金のことって曖昧だと気まずくなりやすいから、次からは先に確認できると助かる。"
+
+        if intent == "boundary":
+            return "お金のことは曖昧にしないで、次からは先に確認して進めたい。"
+
+        return "お金のこと、曖昧なままだとお互い気まずくなりやすいから、一回整理したい。"
+
+    if theme == "距離感":
+        if intent == "clarify":
+            if _consult_has_signal(request, "need_space", "partner_feels_distant", "distance_increasing", "relational_freeze"):
+                return "最近ちょっと距離を感じて、少し気になってた。無理に詰めたいわけじゃないから、今は少し距離を置きたい感じなのか、ただ余裕がないだけなのか教えてもらえると助かる。"
+            return "最近ちょっと距離を感じて、少し気になってた。責めたいわけじゃないから、今どんな感じか落ち着いた時に聞けるとうれしい。"
+
+        if intent == "boundary":
+            return "今は少し距離を置きつつ、落ち着いたらまた話せたら助かる。"
+
+        return "最近ちょっと距離を感じて気になってた。無理に詰めたいわけじゃないから、落ち着いた時に少し話せるとうれしい。"
+
+    return None
+
+
+def _compose_family_best_reply(request) -> Optional[str]:
+    relation = _request_str_attr(request, "relation_type")
+    theme = _request_str_attr(request, "theme")
+
+    if theme == "連絡頻度":
+        return "最近の連絡のこと、少し気になってる。責めたいわけじゃないから、お互い無理のないペースを一度すり合わせられると助かる。"
+
+    if theme == "言い方がきつい":
+        if relation in {"family_parent_child", "parent_child"}:
+            return "今は少し気持ちが強くなっているから、落ち着いてから話したいです。言い方が強いと私はしんどくなるので、できればもう少しやわらかく話してもらえると助かります。"
+        return "さっきのやり取り、少ししんどかった。責めたいわけじゃないけど、強い言い方だとこちらもきつくなるから、落ち着いて話せる形にしたい。"
+
+    if theme == "約束":
+        return "この前の約束のこと、少し引っかかってる。責めたいわけじゃなくて、どういう事情だったのか聞きたいし、次からはどうしたらいいか一回ちゃんと話せると助かる。"
+
+    if theme == "お金":
+        return "お金のこと、曖昧なままだと自分の負担が偏っている感じがして気になってる。責めたいわけじゃなくて、今後は誰が何をどこまで負担するかを一度きちんと決めたい。次から同じことが起きないように、分担の仕方を話せると助かる。"
+
+    if theme == "距離感":
+        return "今は少し距離がある感じがして気になってる。責めたいわけじゃないから、今どんな距離感なら無理がないかを落ち着いて話せると助かる。"
+
+    if theme == "口出し・干渉":
+        return "気にかけてくれているのは分かってる。でも今は少し踏み込まれすぎるとしんどいから、ここは私の判断も尊重してもらえると助かる。"
+
+    if theme == "信頼されていない感じ":
+        return "心配してくれているのは分かるけど、毎回確認されると信頼されていないように感じて少ししんどい。どうしたらお互い安心できるか、一度落ち着いて話したい。"
+
+    if theme == "パートナー経由の伝わり方":
+        return "この話が間に入る形だと気持ちや意図がずれやすいから、必要なら私にも直接わかる形で伝えてもらえると助かる。"
+
+    if theme == "行事・付き合い":
+        return "行事のこと、気持ちは分かるけど今の私たちの負担もあるから、無理のない関わり方を一度すり合わせたい。"
+
+    if theme == "育児方針":
+        return "子どものことを大事に思っているのは同じだと思ってる。だからこそ、どちらかを否定する形じゃなくて、優先したいことを一度落ち着いて整理したい。"
+
+    if theme == "家事分担":
+        return "家のことが偏っている感じがして少ししんどい。責めたいわけじゃないから、今の負担を見える形にして無理のない分け方を決めたい。"
+
+    return None
+
+def _compose_relation_best_reply(request) -> Optional[str]:
+    relation = _request_str_attr(request, "relation_type")
+
+    if relation == "couple":
+        return _compose_couple_best_reply(request)
+
+    if relation == "friend":
+        return _compose_friend_best_reply(request)
+
+    if relation.startswith("family") or relation == "parent_child":
+        return _compose_family_best_reply(request)
+
+    return None
+
+
 def _set_primary_reply(normalized: dict, body: str) -> dict:
-    if not isinstance(normalized, dict):
+    if not body:
         return normalized
 
     reply_options = normalized.get("reply_options")
@@ -1155,17 +1300,31 @@ def _set_primary_reply(normalized: dict, body: str) -> dict:
         first = reply_options[0]
         if isinstance(first, dict):
             first["body"] = body
+            if not first.get("type"):
+                first["type"] = "best_reply"
+            if not first.get("title"):
+                first["title"] = "おすすめの返し方"
         else:
-            reply_options[0] = {"body": body}
-        normalized["reply_options"] = reply_options
-        return normalized
+            reply_options[0] = {
+                "type": "best_reply",
+                "title": "おすすめの返し方",
+                "body": body,
+            }
+    else:
+        normalized["reply_options"] = [{
+            "type": "best_reply",
+            "title": "おすすめの返し方",
+            "body": body,
+        }]
 
-    normalized["reply_options"] = [{"body": body}]
     return normalized
 
 
 def _apply_consult_reply_composer(request, normalized: dict) -> dict:
-    body = _compose_couple_best_reply(request)
+    body = _compose_relation_best_reply(request)
+    if not body:
+        return normalized
+    return _set_primary_reply(normalized, body)
     if not body:
         return normalized
     return _set_primary_reply(normalized, body)
