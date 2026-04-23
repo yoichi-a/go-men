@@ -989,9 +989,12 @@ class ConsultationDraft {
     this.relationDetails = const [],
     this.theme,
     this.themeAnswers = const [],
+    this.themeAnswerKeys = const [],
     this.currentStatus,
+    this.currentStatusKey,
     this.emotionLevel,
     this.goal,
+    this.goalKey,
     this.chatText,
     this.note,
     this.screenshotNames = const [],
@@ -1004,9 +1007,12 @@ class ConsultationDraft {
   final List<String> relationDetails;
   final String? theme;
   final List<String> themeAnswers;
+  final List<String> themeAnswerKeys;
   final String? currentStatus;
+  final String? currentStatusKey;
   final String? emotionLevel;
   final String? goal;
+  final String? goalKey;
   final String? chatText;
   final String? note;
   final List<String> screenshotNames;
@@ -1019,9 +1025,12 @@ class ConsultationDraft {
     List<String>? relationDetails,
     String? theme,
     List<String>? themeAnswers,
+    List<String>? themeAnswerKeys,
     String? currentStatus,
+    String? currentStatusKey,
     String? emotionLevel,
     String? goal,
+    String? goalKey,
     String? chatText,
     String? note,
     List<String>? screenshotNames,
@@ -1034,9 +1043,12 @@ class ConsultationDraft {
       relationDetails: relationDetails ?? this.relationDetails,
       theme: theme ?? this.theme,
       themeAnswers: themeAnswers ?? this.themeAnswers,
+      themeAnswerKeys: themeAnswerKeys ?? this.themeAnswerKeys,
       currentStatus: currentStatus ?? this.currentStatus,
+      currentStatusKey: currentStatusKey ?? this.currentStatusKey,
       emotionLevel: emotionLevel ?? this.emotionLevel,
       goal: goal ?? this.goal,
+      goalKey: goalKey ?? this.goalKey,
       chatText: chatText ?? this.chatText,
       note: note ?? this.note,
       screenshotNames: screenshotNames ?? this.screenshotNames,
@@ -1565,6 +1577,333 @@ class ThemeQuestion {
 
   final String title;
   final List<String> options;
+}
+
+class FlowChoice {
+  final String value;
+  final String label;
+
+  const FlowChoice({required this.value, required this.label});
+}
+
+class FlowQuestionConfig {
+  final String id;
+  final String title;
+  final List<FlowChoice> options;
+
+  const FlowQuestionConfig({
+    required this.id,
+    required this.title,
+    required this.options,
+  });
+}
+
+class ThemeFlowConfig {
+  final String relationType;
+  final String theme;
+  final List<FlowQuestionConfig> detailQuestions;
+  final String statusTitle;
+  final String statusSubtitle;
+  final List<FlowChoice> statusOptions;
+  final String goalTitle;
+  final String goalSubtitle;
+  final List<FlowChoice> goalOptions;
+
+  const ThemeFlowConfig({
+    required this.relationType,
+    required this.theme,
+    required this.detailQuestions,
+    required this.statusTitle,
+    required this.statusSubtitle,
+    required this.statusOptions,
+    required this.goalTitle,
+    required this.goalSubtitle,
+    required this.goalOptions,
+  });
+}
+
+final Map<String, ThemeFlowConfig> _kCoupleThemeFlowConfigs = {
+  '連絡頻度': ThemeFlowConfig(
+    relationType: 'couple',
+    theme: '連絡頻度',
+    detailQuestions: [
+      FlowQuestionConfig(
+        id: 'contact_gap_type',
+        title: '連絡のどこでズレを感じますか？',
+        options: [
+          FlowChoice(value: 'unread_continues', label: '未読が続いている'),
+          FlowChoice(value: 'read_no_reply', label: '既読のあと返ってこない'),
+          FlowChoice(value: 'reply_temperature_gap', label: '返信は来るが温度差がある'),
+          FlowChoice(value: 'self_overmessaged', label: 'こちらが送りすぎた感じがある'),
+          FlowChoice(value: 'partner_too_intense', label: '相手からの連絡が重く感じる'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'contact_gap_pattern',
+        title: 'そのズレはどんな出方をしていますか？',
+        options: [
+          FlowChoice(value: 'sudden_change', label: '急に変わった'),
+          FlowChoice(value: 'gradual_pattern', label: '前から少しずつあった'),
+          FlowChoice(value: 'after_conflict', label: 'ケンカやすれ違いのあとから'),
+          FlowChoice(value: 'possibly_busy', label: '相手が忙しいだけの可能性もある'),
+          FlowChoice(value: 'reason_unclear', label: '理由がよく見えない'),
+        ],
+      ),
+    ],
+    statusTitle: '連絡の状態は今どれに近いですか？',
+    statusSubtitle: '連絡や返信のズレが今どの段階かに近いものを選んでください',
+    statusOptions: [
+      FlowChoice(value: 'latent', label: 'まだ問題として言葉にしていない'),
+      FlowChoice(value: 'signal', label: '少し違和感が出ている'),
+      FlowChoice(value: 'ongoing', label: '返信や温度差のズレが続いている'),
+      FlowChoice(value: 'conflict', label: '連絡のことで実際にぶつかった'),
+      FlowChoice(value: 'frozen', label: '連絡が止まっている / 関係が冷え気味'),
+    ],
+    goalTitle: '今回はどうしたいですか？',
+    goalSubtitle: '今いちばん近い目的を選んでください',
+    goalOptions: [
+      FlowChoice(value: 'clarify', label: '相手の状況や認識を確認したい'),
+      FlowChoice(value: 'express', label: '不安や本音を落ち着いて伝えたい'),
+      FlowChoice(value: 'align', label: '連絡頻度や期待値をすり合わせたい'),
+      FlowChoice(value: 'pause', label: '今日は送らず少し置きたい'),
+      FlowChoice(value: 'repair', label: 'こじれた空気を修復したい'),
+      FlowChoice(value: 'boundary', label: '連絡の線引きを決めたい'),
+    ],
+  ),
+
+  '言い方がきつい': ThemeFlowConfig(
+    relationType: 'couple',
+    theme: '言い方がきつい',
+    detailQuestions: [
+      FlowQuestionConfig(
+        id: 'tone_conflict_side',
+        title: '今回はどちら側に近いですか？',
+        options: [
+          FlowChoice(value: 'hurt_by_partner_tone', label: '相手の言い方で傷ついた'),
+          FlowChoice(value: 'i_spoke_harshly', label: '自分がきつく言ってしまった'),
+          FlowChoice(value: 'both_escalated', label: 'お互い強くなってしまった'),
+          FlowChoice(value: 'text_misread_harsh', label: '文字だけだと強く見えている'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'tone_conflict_core',
+        title: 'いちばん引っかかっているのはどこですか？',
+        options: [
+          FlowChoice(value: 'harsh_wording', label: '言い方そのものがきつかった'),
+          FlowChoice(value: 'felt_denied', label: '否定された感じがした'),
+          FlowChoice(value: 'felt_looked_down_on', label: '見下された感じがした'),
+          FlowChoice(value: 'felt_brushed_off', label: '冗談っぽく流された'),
+          FlowChoice(value: 'repeated_pattern', label: 'こういうことが何度もある'),
+        ],
+      ),
+    ],
+    statusTitle: '今の空気感はどれに近いですか？',
+    statusSubtitle: '言い方による傷つきや気まずさが今どの段階かを選んでください',
+    statusOptions: [
+      FlowChoice(value: 'latent', label: 'まだ表には出していない'),
+      FlowChoice(value: 'signal', label: '言い方が少し引っかかっている'),
+      FlowChoice(value: 'ongoing', label: '傷つきや気まずさが続いている'),
+      FlowChoice(value: 'conflict', label: '言い返した / 言い合いになった'),
+      FlowChoice(value: 'frozen', label: '会話が冷えたり止まり気味'),
+    ],
+    goalTitle: '今回はどうしたいですか？',
+    goalSubtitle: '今いちばん近い目的を選んでください',
+    goalOptions: [
+      FlowChoice(value: 'repair', label: '謝りたい / 関係を修復したい'),
+      FlowChoice(value: 'express', label: '傷ついたことを落ち着いて伝えたい'),
+      FlowChoice(value: 'align', label: '言い方や受け取り方をすり合わせたい'),
+      FlowChoice(value: 'boundary', label: 'その言い方は嫌だと線を引きたい'),
+      FlowChoice(value: 'clarify', label: '本当にどういう意図だったか確認したい'),
+      FlowChoice(value: 'pause', label: '今日は深追いせず少し置きたい'),
+    ],
+  ),
+
+  '約束': ThemeFlowConfig(
+    relationType: 'couple',
+    theme: '約束',
+    detailQuestions: [
+      FlowQuestionConfig(
+        id: 'promise_topic',
+        title: '何についての約束ですか？',
+        options: [
+          FlowChoice(value: 'time_or_contact', label: '時間や連絡'),
+          FlowChoice(value: 'meeting_plan', label: '会う予定'),
+          FlowChoice(value: 'money_or_share', label: 'お金や分担'),
+          FlowChoice(value: 'future_or_important_talk', label: '将来や大事な話'),
+          FlowChoice(value: 'small_promises_stack', label: '小さな約束の積み重ね'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'promise_gap_side',
+        title: '今回のズレはどちらに近いですか？',
+        options: [
+          FlowChoice(value: 'partner_broke', label: '相手が守らなかった'),
+          FlowChoice(value: 'i_broke', label: '自分が守れなかった'),
+          FlowChoice(value: 'recognition_gap', label: 'お互いの認識がズレていた'),
+          FlowChoice(value: 'promise_was_vague', label: 'そもそも約束自体が曖昧だった'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'promise_weight',
+        title: '今回の重さはどのくらいですか？',
+        options: [
+          FlowChoice(value: 'one_time', label: '単発のこと'),
+          FlowChoice(value: 'repeated', label: '何度か続いている'),
+          FlowChoice(value: 'trust_level', label: '信頼に関わる感じがある'),
+          FlowChoice(value: 'mixed_with_other_issues', label: '他の不満も重なっている'),
+        ],
+      ),
+    ],
+    statusTitle: '約束の状態は今どれに近いですか？',
+    statusSubtitle: '約束のズレが今どの段階まで進んでいるかを選んでください',
+    statusOptions: [
+      FlowChoice(value: 'latent', label: 'まだ言葉にはしていない'),
+      FlowChoice(value: 'signal', label: '小さく違和感が出ている'),
+      FlowChoice(value: 'ongoing', label: '約束への引っかかりが続いている'),
+      FlowChoice(value: 'conflict', label: '約束のことで実際にぶつかった'),
+      FlowChoice(value: 'frozen', label: 'その話題が止まっている / 信頼が揺れている'),
+    ],
+    goalTitle: '今回はどうしたいですか？',
+    goalSubtitle: '今いちばん近い目的を選んでください',
+    goalOptions: [
+      FlowChoice(value: 'clarify', label: '何が約束だったのか確認したい'),
+      FlowChoice(value: 'align', label: '約束や期待値をすり合わせたい'),
+      FlowChoice(value: 'express', label: '失望や引っかかりを伝えたい'),
+      FlowChoice(value: 'repair', label: 'こじれた空気を修復したい'),
+      FlowChoice(value: 'boundary', label: 'ルールや約束の線を引きたい'),
+      FlowChoice(value: 'pause', label: '今日は深追いせず少し置きたい'),
+    ],
+  ),
+
+  'お金': ThemeFlowConfig(
+    relationType: 'couple',
+    theme: 'お金',
+    detailQuestions: [
+      FlowQuestionConfig(
+        id: 'money_topic',
+        title: 'どのお金の話ですか？',
+        options: [
+          FlowChoice(value: 'date_or_living_share', label: 'デート代や生活費の負担'),
+          FlowChoice(value: 'reimbursement', label: '立替・返金'),
+          FlowChoice(value: 'gift_or_celebration', label: 'プレゼントやお祝い'),
+          FlowChoice(value: 'future_money_values', label: '将来のお金の感覚'),
+          FlowChoice(value: 'other_money_issue', label: 'その他のお金の話'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'money_block',
+        title: 'いちばん詰まっているのはどこですか？',
+        options: [
+          FlowChoice(value: 'facts_unclear', label: '金額や事実が曖昧'),
+          FlowChoice(value: 'hard_to_request', label: '催促しづらい'),
+          FlowChoice(value: 'fairness_pain', label: '不公平感が強い'),
+          FlowChoice(value: 'hurt_by_treatment', label: '扱われ方に傷ついている'),
+          FlowChoice(value: 'future_anxiety', label: '将来まで不安になる'),
+        ],
+      ),
+    ],
+    statusTitle: 'お金まわりの状態は今どれに近いですか？',
+    statusSubtitle: 'お金の話が今どの段階かに近いものを選んでください',
+    statusOptions: [
+      FlowChoice(value: 'latent', label: 'まだ切り出していない'),
+      FlowChoice(value: 'signal', label: '少し気になっている'),
+      FlowChoice(value: 'ongoing', label: 'もやつきや不公平感が続いている'),
+      FlowChoice(value: 'conflict', label: 'お金のことで実際にぶつかった'),
+      FlowChoice(value: 'frozen', label: '話が止まっている / 触れにくくなっている'),
+    ],
+    goalTitle: '今回はどうしたいですか？',
+    goalSubtitle: '今いちばん近い目的を選んでください',
+    goalOptions: [
+      FlowChoice(value: 'clarify', label: '金額や事実を先に整理したい'),
+      FlowChoice(value: 'align', label: '負担感や価値観をすり合わせたい'),
+      FlowChoice(value: 'express', label: 'モヤモヤや不公平感を伝えたい'),
+      FlowChoice(value: 'boundary', label: '負担やルールの線を引きたい'),
+      FlowChoice(value: 'repair', label: 'お金で悪くなった空気を修復したい'),
+      FlowChoice(value: 'pause', label: '今日は切り出さず少し置きたい'),
+    ],
+  ),
+
+  '距離感': ThemeFlowConfig(
+    relationType: 'couple',
+    theme: '距離感',
+    detailQuestions: [
+      FlowQuestionConfig(
+        id: 'distance_gap_type',
+        title: 'どちら側のズレに近いですか？',
+        options: [
+          FlowChoice(value: 'partner_feels_distant', label: '相手が遠く感じる'),
+          FlowChoice(value: 'partner_too_close', label: '相手が近すぎる'),
+          FlowChoice(value: 'i_need_space', label: '自分が少し距離を置きたい'),
+          FlowChoice(value: 'meeting_frequency_gap', label: '会いたい頻度が合わない'),
+          FlowChoice(value: 'alone_time_gap', label: '一人時間の感覚が合わない'),
+        ],
+      ),
+      FlowQuestionConfig(
+        id: 'distance_gap_pattern',
+        title: 'そのズレはどんな形で出ていますか？',
+        options: [
+          FlowChoice(value: 'sudden_change', label: '急に変わった'),
+          FlowChoice(value: 'gradual_pattern', label: '前から少しずつあった'),
+          FlowChoice(value: 'after_conflict', label: 'ケンカやすれ違いのあとから'),
+          FlowChoice(value: 'no_bad_intent', label: '相手に悪気はなさそう'),
+          FlowChoice(
+            value: 'my_own_needs_unclear',
+            label: '自分でもどこまで求めていいかわからない',
+          ),
+        ],
+      ),
+    ],
+    statusTitle: '距離感の状態は今どれに近いですか？',
+    statusSubtitle: '距離感のズレが今どの段階かに近いものを選んでください',
+    statusOptions: [
+      FlowChoice(value: 'latent', label: 'まだ表には出していない'),
+      FlowChoice(value: 'signal', label: '少し違和感が出ている'),
+      FlowChoice(value: 'ongoing', label: '距離のズレや気まずさが続いている'),
+      FlowChoice(value: 'conflict', label: '距離感のことで実際にぶつかった'),
+      FlowChoice(value: 'frozen', label: '関係が冷えたり、よそよそしくなっている'),
+    ],
+    goalTitle: '今回はどうしたいですか？',
+    goalSubtitle: '今いちばん近い目的を選んでください',
+    goalOptions: [
+      FlowChoice(value: 'align', label: '距離の取り方をすり合わせたい'),
+      FlowChoice(value: 'express', label: '寂しさやしんどさを伝えたい'),
+      FlowChoice(value: 'boundary', label: '関わり方の線を引きたい'),
+      FlowChoice(value: 'pause', label: '今日は深追いせず少し置きたい'),
+      FlowChoice(value: 'repair', label: '冷えた空気を修復したい'),
+      FlowChoice(value: 'clarify', label: '相手の温度感や認識を確認したい'),
+    ],
+  ),
+};
+
+ThemeFlowConfig? _coupleCoreConfig(String theme) =>
+    _kCoupleThemeFlowConfigs[theme];
+
+List<String> _choiceLabels(List<FlowChoice> choices) =>
+    choices.map((choice) => choice.label).toList(growable: false);
+
+List<ThemeQuestion> _flowQuestionsFromConfig(ThemeFlowConfig config) => config
+    .detailQuestions
+    .map(
+      (question) => ThemeQuestion(
+        title: question.title,
+        options: _choiceLabels(question.options),
+      ),
+    )
+    .toList(growable: false);
+
+String? _coupleCoreStatusTitle(String theme) =>
+    _coupleCoreConfig(theme)?.statusTitle;
+
+String? _coupleCoreGoalTitle(String theme) =>
+    _coupleCoreConfig(theme)?.goalTitle;
+
+String? _coupleCoreGoalSubtitle(String theme) =>
+    _coupleCoreConfig(theme)?.goalSubtitle;
+
+List<String>? _coupleCoreGoalOptions(String theme) {
+  final config = _coupleCoreConfig(theme);
+  if (config == null) return null;
+  return _choiceLabels(config.goalOptions);
 }
 
 class ReplyOption {
@@ -3304,18 +3643,26 @@ class ThemeDetailScreen extends StatefulWidget {
 class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   int currentQuestionIndex = 0;
   final List<String> answers = [];
+  final List<String> answerKeys = [];
 
   List<ThemeQuestion> get questions => _buildQuestions(
     relationType: widget.draft.relationType ?? 'couple',
     theme: widget.draft.theme ?? 'その他',
   );
 
-  void _selectAnswer(String answer) {
+  String _answerKey(int questionIndex, int optionIndex) {
+    final relation = (widget.draft.relationType ?? 'unknown').trim();
+    final theme = (widget.draft.theme ?? 'その他').trim();
+    return '$relation|$theme|q${questionIndex + 1}|o${optionIndex + 1}';
+  }
+
+  void _selectAnswer(String answer, int optionIndex) {
     answers.add(answer);
+    answerKeys.add(_answerKey(currentQuestionIndex, optionIndex));
 
     if (currentQuestionIndex < questions.length - 1) {
       setState(() {
-        currentQuestionIndex += 1;
+        currentQuestionIndex++;
       });
       return;
     }
@@ -3325,6 +3672,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
         builder: (_) => CurrentStatusScreen(
           draft: widget.draft.copyWith(
             themeAnswers: List<String>.from(answers),
+            themeAnswerKeys: List<String>.from(answerKeys),
           ),
         ),
       ),
@@ -3347,7 +3695,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           itemBuilder: (context, index) {
             final option = question.options[index];
             return ElevatedButton(
-              onPressed: () => _selectAnswer(option),
+              onPressed: () => _selectAnswer(option, index),
               style: elevatedChoiceStyle,
               child: Text(option, style: choiceTextStyle),
             );
@@ -3377,7 +3725,25 @@ String _draftMetaLabel(ConsultationDraft draft, {required String fallback}) {
   return '$fallback / $bundle';
 }
 
+List<String>? _coupleCoreStatusOptions(String theme) {
+  final config = _coupleCoreConfig(theme);
+  if (config == null) return null;
+  return _choiceLabels(config.statusOptions);
+}
+
+String? _coupleCoreStatusSubtitle(String theme) {
+  return _coupleCoreConfig(theme)?.statusSubtitle;
+}
+
 String _statusTitleForDraft(ConsultationDraft draft) {
+  final rtStatusTitle = draft.relationType ?? '';
+  final thStatusTitle = draft.theme ?? '';
+  if (rtStatusTitle == 'couple') {
+    final overridden = _coupleCoreStatusTitle(thStatusTitle);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   switch (draft.theme) {
     case '嫉妬':
       return '今どの段階ですか？';
@@ -3399,6 +3765,22 @@ String _statusTitleForDraft(ConsultationDraft draft) {
 }
 
 String _statusSubtitleForDraft(ConsultationDraft draft) {
+  final rtStatusSubtitle = draft.relationType ?? '';
+  final thStatusSubtitle = draft.theme ?? '';
+  if (rtStatusSubtitle == 'couple') {
+    final overridden = _coupleCoreStatusSubtitle(thStatusSubtitle);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
+  final rt = draft.relationType ?? '';
+  final th = draft.theme ?? '';
+  if (rt == 'couple') {
+    final subtitleOverride = _coupleCoreStatusSubtitle(th);
+    if (subtitleOverride != null) {
+      return subtitleOverride;
+    }
+  }
   switch (draft.theme) {
     case '嫉妬':
       return '不安が心の中だけか、すでに表に出ているかに近いものを選んでください';
@@ -3416,6 +3798,14 @@ String _statusSubtitleForDraft(ConsultationDraft draft) {
 }
 
 String _goalTitleForDraft(ConsultationDraft draft) {
+  final rtGoalTitle = draft.relationType ?? '';
+  final thGoalTitle = draft.theme ?? '';
+  if (rtGoalTitle == 'couple') {
+    final overridden = _coupleCoreGoalTitle(thGoalTitle);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   switch (draft.theme) {
     case '嫉妬':
       return '今回はどこを目指したいですか？';
@@ -3433,6 +3823,14 @@ String _goalTitleForDraft(ConsultationDraft draft) {
 }
 
 String _goalSubtitleForDraft(ConsultationDraft draft) {
+  final rtGoalSubtitle = draft.relationType ?? '';
+  final thGoalSubtitle = draft.theme ?? '';
+  if (rtGoalSubtitle == 'couple') {
+    final overridden = _coupleCoreGoalSubtitle(thGoalSubtitle);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   switch (draft.theme) {
     case '嫉妬':
       return '安心したいのか、伝えたいのか、線引きしたいのかで選んでください';
@@ -3446,8 +3844,22 @@ String _goalSubtitleForDraft(ConsultationDraft draft) {
 }
 
 List<String> _statusOptionsForDraft(ConsultationDraft draft) {
+  final rtStatusOptions = draft.relationType ?? '';
+  final thStatusOptions = draft.theme ?? '';
+  if (rtStatusOptions == 'couple') {
+    final overridden = _coupleCoreStatusOptions(thStatusOptions);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   final relationType = draft.relationType ?? '';
   final theme = draft.theme ?? '';
+  if (relationType == 'couple') {
+    final overridden = _coupleCoreStatusOptions(theme);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   final a1 = _draftAnswer(draft, 0);
   final a2 = _draftAnswer(draft, 1);
   final a3 = _draftAnswer(draft, 2);
@@ -3887,6 +4299,14 @@ List<String> _statusOptionsForDraft(ConsultationDraft draft) {
 }
 
 List<String> _goalOptionsForDraft(ConsultationDraft draft) {
+  final rtGoalOptions = draft.relationType ?? '';
+  final thGoalOptions = draft.theme ?? '';
+  if (rtGoalOptions == 'couple') {
+    final overridden = _coupleCoreGoalOptions(thGoalOptions);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
   final theme = draft.theme ?? '';
   final relationType = draft.relationType ?? '';
   final bundle = _draftAnswerBundle(draft);
@@ -4233,11 +4653,21 @@ class CurrentStatusScreen extends StatelessWidget {
 
   final ConsultationDraft draft;
 
-  void _selectStatus(BuildContext context, String status) {
+  String _statusKey(int optionIndex) {
+    final relation = (draft.relationType ?? 'unknown').trim();
+    final theme = (draft.theme ?? 'その他').trim();
+    return '$relation|$theme|status|o${optionIndex + 1}';
+  }
+
+  void _selectStatus(BuildContext context, String status, int optionIndex) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            EmotionLevelScreen(draft: draft.copyWith(currentStatus: status)),
+        builder: (_) => EmotionLevelScreen(
+          draft: draft.copyWith(
+            currentStatus: status,
+            currentStatusKey: _statusKey(optionIndex),
+          ),
+        ),
       ),
     );
   }
@@ -4258,7 +4688,7 @@ class CurrentStatusScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             final status = statuses[index];
             return ElevatedButton(
-              onPressed: () => _selectStatus(context, status),
+              onPressed: () => _selectStatus(context, status, index),
               style: elevatedChoiceStyle,
               child: Text(status, style: choiceTextStyle),
             );
@@ -4495,10 +4925,18 @@ class GoalScreen extends StatelessWidget {
 
   final ConsultationDraft draft;
 
-  void _selectGoal(BuildContext context, String goal) {
+  String _goalKey(int optionIndex) {
+    final relation = (draft.relationType ?? 'unknown').trim();
+    final theme = (draft.theme ?? 'その他').trim();
+    return '$relation|$theme|goal|o${optionIndex + 1}';
+  }
+
+  void _selectGoal(BuildContext context, String goal, int optionIndex) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EvidenceInputScreen(draft: draft.copyWith(goal: goal)),
+        builder: (_) => EvidenceInputScreen(
+          draft: draft.copyWith(goal: goal, goalKey: _goalKey(optionIndex)),
+        ),
       ),
     );
   }
@@ -4519,7 +4957,7 @@ class GoalScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             final goal = goals[index];
             return ElevatedButton(
-              onPressed: () => _selectGoal(context, goal),
+              onPressed: () => _selectGoal(context, goal, index),
               style: elevatedChoiceStyle,
               child: Text(goal, style: choiceTextStyle),
             );
@@ -4535,6 +4973,310 @@ class _PickedScreenshot {
 
   final String name;
   final Uint8List bytes;
+}
+
+List<String> _latentSignalsForChoiceKey(String key) {
+  final parts = key.split('|');
+  if (parts.length < 4) return const [];
+
+  final relation = parts[0];
+  final theme = parts[1];
+  final slot = parts[2];
+  final option = parts[3];
+
+  if (relation != 'couple') return const [];
+
+  if (slot == 'status') {
+    switch (option) {
+      case 'o1':
+        return const ['issue_unspoken', 'conflict_visibility_low'];
+      case 'o2':
+        return const ['early_signal', 'tension_emerging'];
+      case 'o3':
+        return const ['ongoing_strain', 'issue_persisting'];
+      case 'o4':
+        return const ['active_conflict', 'emotional_activation_high'];
+      case 'o5':
+        return const ['relational_freeze', 'distance_increasing'];
+    }
+  }
+
+  switch (theme) {
+    case '連絡頻度':
+      if (slot == 'q1') {
+        switch (option) {
+          case 'o1':
+            return const [
+              'response_absence',
+              'contact_anxiety',
+              'uncertainty_high',
+            ];
+          case 'o2':
+            return const ['seen_no_reply', 'rejection_pain', 'contact_anxiety'];
+          case 'o3':
+            return const ['emotional_temperature_gap', 'reciprocity_gap'];
+          case 'o4':
+            return const ['overpursuit_risk', 'self_awareness_present'];
+          case 'o5':
+            return const ['engulfment_pressure', 'boundary_tension'];
+        }
+      }
+      if (slot == 'q2') {
+        switch (option) {
+          case 'o1':
+            return const ['abrupt_change', 'uncertainty_high'];
+          case 'o2':
+            return const ['chronic_pattern', 'issue_accumulation'];
+          case 'o3':
+            return const ['post_conflict_aftereffect', 'repair_need'];
+          case 'o4':
+            return const ['busyness_possible', 'malice_uncertain'];
+          case 'o5':
+            return const ['uncertainty_high', 'meaning_not_clear'];
+        }
+      }
+      if (slot == 'goal') {
+        switch (option) {
+          case 'o1':
+            return const ['clarify_intent'];
+          case 'o2':
+            return const ['express_intent'];
+          case 'o3':
+            return const ['align_intent'];
+          case 'o4':
+            return const ['pause_intent'];
+          case 'o5':
+            return const ['repair_intent'];
+          case 'o6':
+            return const ['boundary_intent'];
+        }
+      }
+      break;
+
+    case '言い方がきつい':
+      if (slot == 'q1') {
+        switch (option) {
+          case 'o1':
+            return const ['hurt_by_partner_tone', 'emotional_pain'];
+          case 'o2':
+            return const ['speaker_regret', 'repair_need'];
+          case 'o3':
+            return const ['mutual_escalation', 'conflict_reciprocal'];
+          case 'o4':
+            return const ['text_misread_risk', 'tone_ambiguity'];
+        }
+      }
+      if (slot == 'q2') {
+        switch (option) {
+          case 'o1':
+            return const ['harsh_wording', 'tone_sensitivity'];
+          case 'o2':
+            return const ['rejection_pain', 'validation_need'];
+          case 'o3':
+            return const ['condescension_pain', 'respect_need'];
+          case 'o4':
+            return const ['dismissed_feeling', 'seriousness_gap'];
+          case 'o5':
+            return const ['repeated_pattern', 'pattern_fatigue'];
+        }
+      }
+      if (slot == 'goal') {
+        switch (option) {
+          case 'o1':
+            return const ['repair_intent'];
+          case 'o2':
+            return const ['express_intent'];
+          case 'o3':
+            return const ['align_intent'];
+          case 'o4':
+            return const ['boundary_intent'];
+          case 'o5':
+            return const ['clarify_intent'];
+          case 'o6':
+            return const ['pause_intent'];
+        }
+      }
+      break;
+
+    case '約束':
+      if (slot == 'q1') {
+        switch (option) {
+          case 'o1':
+            return const ['promise_time_contact_issue'];
+          case 'o2':
+            return const ['promise_meeting_issue'];
+          case 'o3':
+            return const ['promise_money_issue'];
+          case 'o4':
+            return const ['promise_future_issue'];
+          case 'o5':
+            return const ['small_promises_accumulated'];
+        }
+      }
+      if (slot == 'q2') {
+        switch (option) {
+          case 'o1':
+            return const ['partner_broke_promise', 'trust_damage'];
+          case 'o2':
+            return const ['self_broke_promise', 'repair_need'];
+          case 'o3':
+            return const ['recognition_gap', 'ambiguity_high'];
+          case 'o4':
+            return const ['promise_ambiguity', 'expectation_misalignment'];
+        }
+      }
+      if (slot == 'q3') {
+        switch (option) {
+          case 'o1':
+            return const ['single_incident'];
+          case 'o2':
+            return const ['repeated_pattern', 'issue_accumulation'];
+          case 'o3':
+            return const ['trust_damage', 'security_threatened'];
+          case 'o4':
+            return const ['stacked_grievances', 'issue_overlap'];
+        }
+      }
+      if (slot == 'goal') {
+        switch (option) {
+          case 'o1':
+            return const ['clarify_intent'];
+          case 'o2':
+            return const ['align_intent'];
+          case 'o3':
+            return const ['express_intent'];
+          case 'o4':
+            return const ['repair_intent'];
+          case 'o5':
+            return const ['boundary_intent'];
+          case 'o6':
+            return const ['pause_intent'];
+        }
+      }
+      break;
+
+    case 'お金':
+      if (slot == 'q1') {
+        switch (option) {
+          case 'o1':
+            return const ['money_share_issue', 'fairness_concern'];
+          case 'o2':
+            return const ['reimbursement_issue', 'request_difficulty'];
+          case 'o3':
+            return const [
+              'gift_expectation_issue',
+              'symbolic_value_sensitivity',
+            ];
+          case 'o4':
+            return const ['future_finance_anxiety', 'values_alignment_need'];
+          case 'o5':
+            return const ['money_issue_other'];
+        }
+      }
+      if (slot == 'q2') {
+        switch (option) {
+          case 'o1':
+            return const ['facts_unclear', 'clarity_needed'];
+          case 'o2':
+            return const ['request_difficulty', 'avoidance_pressure'];
+          case 'o3':
+            return const ['fairness_pain', 'resentment_risk'];
+          case 'o4':
+            return const ['treatment_hurt', 'respect_need'];
+          case 'o5':
+            return const ['future_finance_anxiety', 'security_concern'];
+        }
+      }
+      if (slot == 'goal') {
+        switch (option) {
+          case 'o1':
+            return const ['clarify_intent'];
+          case 'o2':
+            return const ['align_intent'];
+          case 'o3':
+            return const ['express_intent'];
+          case 'o4':
+            return const ['boundary_intent'];
+          case 'o5':
+            return const ['repair_intent'];
+          case 'o6':
+            return const ['pause_intent'];
+        }
+      }
+      break;
+
+    case '距離感':
+      if (slot == 'q1') {
+        switch (option) {
+          case 'o1':
+            return const ['partner_feels_distant', 'attachment_anxiety'];
+          case 'o2':
+            return const ['closeness_pressure', 'boundary_tension'];
+          case 'o3':
+            return const ['need_space', 'self_regulation_need'];
+          case 'o4':
+            return const ['meeting_frequency_gap', 'closeness_misalignment'];
+          case 'o5':
+            return const ['alone_time_gap', 'autonomy_misalignment'];
+        }
+      }
+      if (slot == 'q2') {
+        switch (option) {
+          case 'o1':
+            return const ['abrupt_change', 'uncertainty_high'];
+          case 'o2':
+            return const ['chronic_pattern', 'issue_accumulation'];
+          case 'o3':
+            return const ['post_conflict_aftereffect', 'repair_need'];
+          case 'o4':
+            return const ['no_bad_intent_possible', 'malice_uncertain'];
+          case 'o5':
+            return const ['self_needs_unclear', 'internal_conflict'];
+        }
+      }
+      if (slot == 'goal') {
+        switch (option) {
+          case 'o1':
+            return const ['align_intent'];
+          case 'o2':
+            return const ['express_intent'];
+          case 'o3':
+            return const ['boundary_intent'];
+          case 'o4':
+            return const ['pause_intent'];
+          case 'o5':
+            return const ['repair_intent'];
+          case 'o6':
+            return const ['clarify_intent'];
+        }
+      }
+      break;
+  }
+
+  return const [];
+}
+
+List<String> _buildLatentSignals(ConsultationDraft draft) {
+  final keys = <String>[
+    ...draft.themeAnswerKeys,
+    if (draft.currentStatusKey != null && draft.currentStatusKey!.isNotEmpty)
+      draft.currentStatusKey!,
+    if (draft.goalKey != null && draft.goalKey!.isNotEmpty) draft.goalKey!,
+  ];
+
+  final seen = <String>{};
+  final result = <String>[];
+
+  for (final key in keys) {
+    final signals = _latentSignalsForChoiceKey(key);
+    for (final signal in signals) {
+      if (seen.add(signal)) {
+        result.add(signal);
+      }
+    }
+  }
+
+  return result;
 }
 
 class EvidenceInputScreen extends StatefulWidget {
@@ -4955,9 +5697,13 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           'relation_detail_labels': widget.draft.relationDetails,
           'theme': widget.draft.theme,
           'theme_details': widget.draft.themeAnswers,
+          'theme_detail_keys': widget.draft.themeAnswerKeys,
           'current_status': widget.draft.currentStatus,
+          'current_status_key': widget.draft.currentStatusKey,
           'emotion_level': widget.draft.emotionLevel,
           'goal': widget.draft.goal,
+          'goal_key': widget.draft.goalKey,
+          'latent_signals': _buildLatentSignals(widget.draft),
           'chat_text': widget.draft.chatText,
           'note': widget.draft.note,
           'profile_context': profile?.toProfileContext(),
@@ -8435,10 +9181,23 @@ final ButtonStyle elevatedChoiceStyle = ElevatedButton.styleFrom(
 
 const TextStyle choiceTextStyle = TextStyle(fontSize: 18);
 
+List<ThemeQuestion>? _buildCoupleCoreQuestions(String theme) {
+  final config = _coupleCoreConfig(theme);
+  if (config == null) return null;
+  return _flowQuestionsFromConfig(config);
+}
+
 List<ThemeQuestion> _buildQuestions({
   required String relationType,
   required String theme,
 }) {
+  if (relationType == 'couple') {
+    final overridden = _buildCoupleCoreQuestions(theme);
+    if (overridden != null) {
+      return overridden;
+    }
+  }
+
   if (relationType == 'couple') {
     switch (theme) {
       case '連絡頻度':

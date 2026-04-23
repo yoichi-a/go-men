@@ -42,9 +42,12 @@ class ConsultSessionRequest(BaseModel):
     relation_detail_labels: List[str] = Field(default_factory=list)
     theme: str
     theme_details: List[str]
+    theme_detail_keys: List[str] = Field(default_factory=list)
     current_status: str
+    current_status_key: Optional[str] = None
     emotion_level: str
     goal: str
+    goal_key: Optional[str] = None
     chat_text: Optional[str] = None
     note: Optional[str] = None
     profile_context: Optional[str] = None
@@ -52,6 +55,7 @@ class ConsultSessionRequest(BaseModel):
     recent_consultation_history: List[str] = Field(default_factory=list)
     screenshots_base64: List[str] = Field(default_factory=list)
     upload_ids: List[str] = Field(default_factory=list)
+    latent_signals: List[str] = Field(default_factory=list)
 
 
 class PrecheckRequest(BaseModel):
@@ -604,12 +608,86 @@ def _request_to_prompt_lines(request, heading: str) -> str:
     return "\n".join(lines)
 
 
+def _request_list_attr(request, name: str) -> List[str]:
+    value = getattr(request, name, [])
+    if not isinstance(value, list):
+        return []
+    result: List[str] = []
+    for item in value:
+        s = str(item).strip()
+        if s:
+            result.append(s)
+    return result
+
+
+def _request_text_attr(request, name: str) -> str:
+    value = getattr(request, name, "")
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+
+def _request_str_attr(request, name: str) -> str:
+    value = getattr(request, name, "")
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _consult_semantic_focus(request) -> str:
+    signals = set(_request_list_attr(request, "latent_signals"))
+    signals.update(_derived_latent_signals_from_keys(request))
+    notes: List[str] = []
+
+    if signals & {"contact_anxiety", "response_absence", "seen_no_reply", "uncertainty_high"}:
+        notes.append("連絡不安や不確実性を軽く扱わず、安心感と解釈の余地を残す方向で組み立ててください。")
+
+    if signals & {"reciprocity_gap", "emotional_temperature_gap", "meeting_frequency_gap", "closeness_misalignment"}:
+        notes.append("どちらが悪いかより、温度差や期待値のズレとして整理してください。")
+
+    if signals & {"overpursuit_risk", "engulfment_pressure", "boundary_tension", "boundary_intent"}:
+        notes.append("追い詰め感を避け、相手の余白と境界線を尊重する案を優先してください。")
+
+    if signals & {"hurt_by_partner_tone", "harsh_wording", "condescension_pain", "dismissed_feeling"}:
+        notes.append("内容の正しさより、傷つき・尊重不足・受け取り方の悪化を重視してください。")
+
+    if signals & {"trust_damage", "promise_meeting_issue", "promise_future_issue", "partner_broke_promise"}:
+        notes.append("単なる事実確認ではなく、信頼の揺れや軽く扱われた感じまで言語化してください。")
+
+    if signals & {"money_share_issue", "reimbursement_issue", "fairness_pain", "future_finance_anxiety"}:
+        notes.append("金額の話だけでなく、公平感・負担感・感謝不足・将来不安まで扱ってください。")
+
+    if signals & {"partner_feels_distant", "need_space", "alone_time_gap", "relational_freeze", "distance_increasing"}:
+        notes.append("距離感テーマでは、近づきたい側と離れたい側の非対称性を明示してください。")
+
+    if signals & {"active_conflict", "emotional_activation_high", "ongoing_strain", "issue_persisting"}:
+        notes.append("正しさの主張より、刺激を下げて悪化を止める案を優先してください。")
+
+    if "repair_intent" in signals:
+        notes.append("修復意図が強いため、自己弁護より受け止めと再接続を優先してください。")
+
+    if "clarify_intent" in signals:
+        notes.append("確認したい意図が強いため、尋問調ではなく答えやすい聞き方を優先してください。")
+
+    if "align_intent" in signals:
+        notes.append("今後のすり合わせ意図が強いため、再発防止や運用の合わせ方まで触れてください。")
+
+    if "pause_intent" in signals:
+        notes.append("今すぐ送らない・少し置く選択肢も前向きに提案してください。")
+
+    if "express_intent" in signals:
+        notes.append("感情表現が目的でも、重さより伝わりやすさを優先してください。")
+
+    return " ".join(notes)
+
 def _consult_case_style(request) -> str:
     relation = str(getattr(request, "relation_type", "")).strip()
     theme = str(getattr(request, "theme", "")).strip()
     current_status = str(getattr(request, "current_status", "")).strip()
     emotion_level = str(getattr(request, "emotion_level", "")).strip()
     goal = str(getattr(request, "goal", "")).strip()
+    semantic_focus = _consult_semantic_focus(request)
 
     notes: List[str] = []
 
@@ -636,6 +714,9 @@ def _consult_case_style(request) -> str:
 
     if emotion_level in {"かなり感情的", "爆発しそう"}:
         notes.append("感情の勢いをそのまま出す案は避け、短く安全な文を優先してください。")
+
+    if semantic_focus:
+        notes.append(semantic_focus)
 
     if goal == "距離を置きたい":
         notes.append("仲直りの演出より、角が立ちにくい境界線設定を優先してください。")
@@ -678,12 +759,16 @@ def _consult_case_axis(request) -> str:
     details_text = _compact_case_text(
         getattr(request, "relation_detail_labels", []),
         getattr(request, "theme_details", []),
+        getattr(request, "theme_detail_keys", []),
         getattr(request, "current_status", ""),
+        getattr(request, "current_status_key", ""),
         getattr(request, "emotion_level", ""),
         getattr(request, "goal", ""),
+        getattr(request, "goal_key", ""),
         getattr(request, "note", ""),
         getattr(request, "chat_text", ""),
         getattr(request, "recent_pattern_summary", ""),
+        getattr(request, "latent_signals", []),
     )
 
     notes: List[str] = []
@@ -762,6 +847,329 @@ def _consult_case_axis(request) -> str:
     return " ".join(notes)
 
 
+def _consult_semantic_directives_text(request) -> str:
+    signals = set(_request_list_attr(request, "latent_signals"))
+    parts: List[str] = []
+
+    if signals & {"contact_anxiety", "seen_no_reply", "response_absence", "uncertainty_high", "clarify_intent"}:
+        parts.append("best_reply は2文以内を基本にし、質問は1つまで、決めつけ語や被害者化表現を避けて、答えやすい確認にしてください。")
+
+    if signals & {"active_conflict", "emotional_activation_high", "ongoing_strain", "issue_persisting"}:
+        parts.append("send_timing_recommendation は基本 soften_first 寄りにし、pre_send_cautions の先頭で詰問化・悪化リスクを明示してください。")
+
+    if signals & {"repair_intent", "trust_damage", "partner_broke_promise", "self_broke_promise"}:
+        parts.append("best_reply は説明要求より先に hurt や不信感への受け止めを置き、再接続余地を残してください。")
+
+    if signals & {"boundary_intent", "need_space", "engulfment_pressure", "partner_feels_distant", "relational_freeze"}:
+        parts.append("best_reply では返答強制を避け、『今すぐ返事じゃなくて大丈夫』のような余白を許可してください。")
+
+    if signals & {"fairness_pain", "money_share_issue", "reimbursement_issue", "future_finance_anxiety"}:
+        parts.append("お金テーマでは金額の正しさだけでなく、不公平感・負担感・言い出しにくさを言語化してください。")
+
+    if signals & {"hurt_by_partner_tone", "harsh_wording", "condescension_pain", "dismissed_feeling"}:
+        parts.append("言い方テーマでは内容反論より先に、傷つき・尊重不足・受け取りの悪化を扱ってください。")
+
+    return " ".join(parts)
+
+
+def _consult_all_semantic_keys(request) -> List[str]:
+    keys: List[str] = []
+    keys.extend(_request_list_attr(request, "theme_detail_keys"))
+
+    current_status_key = _request_str_attr(request, "current_status_key")
+    if current_status_key:
+        keys.append(current_status_key)
+
+    goal_key = _request_str_attr(request, "goal_key")
+    if goal_key:
+        keys.append(goal_key)
+
+    return keys
+
+
+def _derived_latent_signals_from_keys(request) -> List[str]:
+    theme = _request_str_attr(request, "theme")
+    keys = _consult_all_semantic_keys(request)
+    if not keys:
+        return []
+
+    derived: set[str] = set()
+
+    def has_suffix(*suffixes: str) -> bool:
+        for key in keys:
+            for suffix in suffixes:
+                if key.endswith(suffix):
+                    return True
+        return False
+
+    if theme == "連絡頻度":
+        if has_suffix("|q1|o2", "|q2|o1"):
+            derived.update({"abrupt_change", "seen_no_reply", "contact_anxiety", "response_absence", "uncertainty_high"})
+        if has_suffix("|status|o4"):
+            derived.update({"active_conflict", "ongoing_strain", "issue_persisting"})
+        if has_suffix("|goal|o1"):
+            derived.add("clarify_intent")
+
+    elif theme == "言い方がきつい":
+        if has_suffix("|q1|o2"):
+            derived.add("tone_hurt")
+        if has_suffix("|q2|o1"):
+            derived.add("repeated_pattern")
+        if has_suffix("|status|o4"):
+            derived.update({"active_conflict", "issue_persisting"})
+
+    elif theme == "約束":
+        if has_suffix("|q1|o1"):
+            derived.update({"trust_drop", "hurt_expectation"})
+        if has_suffix("|q2|o1"):
+            derived.add("repeated_pattern")
+        if has_suffix("|status|o4"):
+            derived.update({"active_conflict", "issue_persisting"})
+
+    elif theme == "お金":
+        if has_suffix("|q1|o2", "|q2|o1"):
+            derived.update({"unfairness", "burden_imbalance"})
+        if has_suffix("|status|o4"):
+            derived.update({"active_conflict", "issue_persisting"})
+        if has_suffix("|goal|o2"):
+            derived.add("align_intent")
+
+    elif theme == "距離感":
+        if has_suffix("|q1|o2", "|q2|o2"):
+            derived.update({"partner_feels_distant", "need_space", "distance_increasing"})
+        if has_suffix("|status|o4"):
+            derived.update({"active_conflict", "issue_persisting"})
+        if has_suffix("|goal|o1"):
+            derived.add("clarify_intent")
+
+    return sorted(derived)
+
+
+def _consult_has_signal(request, *names: str) -> bool:
+    signals = set(_request_list_attr(request, "latent_signals"))
+    signals.update(_derived_latent_signals_from_keys(request))
+    return any(name in signals for name in names)
+
+
+def _consult_goal_intent(request) -> str:
+    theme = _request_str_attr(request, "theme")
+    goal = _request_str_attr(request, "goal")
+
+    if _consult_has_signal(request, "align_intent"):
+        return "align"
+    if _consult_has_signal(request, "clarify_intent"):
+        return "clarify"
+    if _consult_has_signal(request, "repair_intent"):
+        return "repair"
+    if _consult_has_signal(request, "boundary_intent"):
+        return "boundary"
+
+    if theme in {"連絡頻度", "距離感"}:
+        if "知りたい" in goal or "気持ち" in goal or "確認" in goal:
+            return "clarify"
+
+    if theme == "お金":
+        if "納得" in goal or "形にしたい" in goal or "すり合わせ" in goal or "決めたい" in goal:
+            return "align"
+
+    if "仲直り" in goal or "修復" in goal:
+        return "repair"
+    if "距離" in goal or "離れたい" in goal:
+        return "boundary"
+    if "知りたい" in goal or "確認" in goal:
+        return "clarify"
+    if "納得" in goal or "整理" in goal or "落ち着いて話したい" in goal:
+        return "align"
+
+    return ""
+
+
+def _compose_couple_best_reply(request) -> Optional[str]:
+    relation = _request_text_attr(request, "relation_type")
+    theme = _request_text_attr(request, "theme")
+    intent = _consult_goal_intent(request)
+
+    if relation != "couple":
+        return None
+
+    if theme == "連絡頻度":
+        if intent == "clarify":
+            if _consult_has_signal(request, "active_conflict", "ongoing_strain", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "最近ちょっと連絡が少なくて、私は不安になってた。責める言い方になってたらごめん。今すぐじゃなくて大丈夫だから、落ち着いたら今どんな感じか話せる範囲で教えてもらえると嬉しい。"
+            if _consult_has_signal(request, "need_space", "partner_feels_distant", "engulfment_pressure", "distance_increasing", "relational_freeze"):
+                return "最近ちょっと連絡が少なくて、私は少し不安になってた。責めたいわけじゃないし、今すぐ返事じゃなくて大丈夫だから、少し距離がほしい感じなのかだけ、話せる時に教えてもらえると嬉しい。"
+            if _consult_has_signal(request, "abrupt_change", "seen_no_reply", "contact_anxiety", "response_absence", "uncertainty_high") or _consult_has_any_key_suffix(request, "|q1|o2", "|q2|o1"):
+                return "最近ちょっと連絡が少なくて、私は少し不安になってた。責めたいわけじゃなくて、何かあったのか、今どんな感じか話せる範囲で教えてもらえると嬉しい。"
+            return "最近ちょっと連絡が少なくて、私は少し不安になってた。責めたいわけじゃなくて、今どんな感じか話せる範囲で教えてもらえると嬉しい。"
+
+        if intent == "repair":
+            if _consult_has_signal(request, "active_conflict", "ongoing_strain", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "最近、私も不安で言い方が強くなっていたかもしれない。しんどくさせてたらごめん。今すぐじゃなくて大丈夫だから、落ち着いたら少し話せたらうれしい。"
+            return "最近、私も不安で言い方が強くなっていたかもしれない。責めたいわけじゃないから、落ち着いたら今どんな感じか少し話せたらうれしい。"
+
+        if intent == "align":
+            if _consult_has_signal(request, "need_space", "partner_feels_distant", "distance_increasing", "relational_freeze"):
+                return "最近の連絡ペースのことで、私は少し不安になってた。近すぎるとしんどい時もあると思うから、お互いに無理のない距離感を一度すり合わせられたらうれしい。"
+            return "最近の連絡ペースのことで、私は少し不安になってた。無理のない範囲で、お互いに楽な頻度を一度すり合わせられたらうれしい。"
+
+        if intent == "boundary":
+            if _consult_has_signal(request, "active_conflict", "ongoing_strain", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "今のままやり取りを続けると、お互いしんどくなりそうだと感じてる。いったん少し間を置いて、落ち着いてから話したい。"
+            return "今のまま追って連絡すると、お互いしんどくなりそうだと感じてる。少し間を置いて、また落ち着いて話せる時に話したい。"
+
+        if intent == "pause":
+            return "今は気持ちが少し揺れているから、いったん落ち着いてからにするね。また話せる時に話したい。"
+
+        if intent == "express":
+            if _consult_has_signal(request, "abrupt_change", "seen_no_reply", "contact_anxiety", "response_absence") or _consult_has_any_key_suffix(request, "|q1|o2", "|q2|o1"):
+                return "最近連絡が減って、私は少し寂しさと不安を感じてた。責めたいわけじゃなくて、その変化が気になっていたことだけ伝えたかった。"
+            return "最近連絡が減って、私は少し寂しさと不安を感じてた。責めたいわけじゃなくて、その気持ちだけ先に伝えたかった。"
+
+        return "最近ちょっと連絡が少なくて、私は少し不安になってた。責めたいわけじゃなくて、今どんな感じか教えてもらえると嬉しい。"
+
+    if theme == "言い方がきつい":
+        if intent == "repair":
+            if _consult_has_signal(request, "active_conflict", "ongoing_strain", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "さっきは私も感情的だったかもしれない。きつく返してたらごめん。責め合いたいわけじゃないから、少し落ち着いてから話したい。"
+            return "さっきの言い方、きつく聞こえたならごめん。責めたいわけじゃなくて、もう少し落ち着いて話したいだけなんだ。"
+
+        if intent == "express":
+            if _consult_has_signal(request, "issue_persisting", "repeated_pattern", "tone_hurt"):
+                return "内容そのものより、言い方でしんどくなることが続いていて私はつらい。否定したいわけじゃなくて、もう少し穏やかに話せるとうれしい。"
+            return "その言い方だと、私は少し強く責められたように感じてしんどかった。内容を否定したいわけじゃなくて、もう少し穏やかに話せるとうれしい。"
+
+        if intent == "align":
+            if _consult_has_signal(request, "issue_persisting", "repeated_pattern") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "話す内容より言い方で毎回しんどくなりやすい気がしてる。感情的になった時はいったん置くなど、話し方のルールを一緒に決めたい。"
+            return "内容より言い方でお互いしんどくなりやすい気がしてる。感情的になった時は少し置くとか、話し方を一緒に決められたらうれしい。"
+
+        if intent == "boundary":
+            if _consult_has_signal(request, "active_conflict", "tone_hurt") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "今の言い方のままだと、私は落ち着いて話せない。いったん時間を置いて、もう少し穏やかに話せる時に続けたい。"
+            return "今の言い方のままだと、私は落ち着いて話せない。少し時間を置いて、もう少し穏やかに話せる時に続けたい。"
+
+        if intent == "clarify":
+            if _consult_has_signal(request, "anger_ambiguity", "tone_unclear"):
+                return "責めたいわけじゃないんだけど、さっきの言い方は本当に怒っていたのか、ただ余裕がなかっただけなのか知りたい。"
+            return "責めたいわけじゃないんだけど、さっきの言い方は怒っていたのか、ただ余裕がなかったのか知りたい。"
+
+        return "その言い方だと、私は少しきつく受け取ってしまう。責めたいわけじゃなくて、もう少し落ち着いて話せるとうれしい。"
+
+    if theme == "約束":
+        if intent == "clarify":
+            if _consult_has_signal(request, "active_conflict", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "この前の約束のこと、私も感情的になっていたらごめん。大事に受け取ってた分、どういう事情だったのか落ち着いて聞かせてもらえるとうれしい。"
+            return "この前の約束のこと、私は大事に受け取ってた分、どういうつもりだったのか気になってる。責めたいわけじゃないから、事情を聞かせてもらえるとうれしい。"
+
+        if intent == "repair":
+            if _consult_has_signal(request, "active_conflict", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "約束のことで私も感情的になってしまってごめん。責め合いたいわけじゃなくて、何がずれていたのか落ち着いて整理したい。"
+            return "約束のことで私も感情的になってしまってごめん。大事だったからこそ気になっていて、落ち着いて話せる時に少し整理できたらうれしい。"
+
+        if intent == "align":
+            if _consult_has_signal(request, "issue_persisting", "repeated_pattern"):
+                return "約束のすれ違いが繰り返されると、お互いしんどくなる気がしてる。次からは守れそうなことだけ言い合える形にしたい。"
+            return "約束の受け取り方にズレがあった気がしてる。次からどうしたらお互いに無理なく守れるか、一度すり合わせたい。"
+
+        if intent == "boundary":
+            if _consult_has_signal(request, "issue_persisting", "trust_drop"):
+                return "約束が曖昧なままだと、私はしんどくなりやすい。今後はできることだけ言い合える形にしたい。"
+            return "約束が曖昧なままだと、私はしんどくなりやすい。今後はできることだけ言い合える形にしたい。"
+
+        if intent == "express":
+            if _consult_has_signal(request, "trust_drop", "hurt_expectation"):
+                return "約束のことを軽く扱われた感じが続くと、私は悲しさと不信感が残ってしまう。責めたいというより、その気持ちを伝えておきたい。"
+            return "約束のことを軽く扱われた感じがして、私は悲しかった。責めたいというより、そう感じたことを伝えておきたい。"
+
+        return "約束のことが私の中で引っかかってる。責めたいわけじゃないから、どういうつもりだったのか聞かせてもらえるとうれしい。"
+
+    if theme == "お金":
+        if intent == "clarify":
+            if _consult_has_signal(request, "active_conflict", "issue_persisting") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "お金のこと、私も感情的になっていたらごめん。責めたいわけじゃないから、どう考えていたか落ち着いて聞かせてもらえると助かる。"
+            return "お金のこと、私の中で少し引っかかってる。責めたいわけじゃないから、どう考えていたか聞かせてもらえると助かる。"
+
+        if intent == "repair":
+            if _consult_has_signal(request, "active_conflict", "issue_persisting"):
+                return "お金の話で私も言い方が強くなっていたらごめん。責め合うより、まず何に引っかかっていたかを落ち着いて整理したい。"
+            return "お金の話で私も言い方が強くなっていたらごめん。責め合いたいわけじゃなくて、納得できる形を一緒に考えたい。"
+
+        if intent == "align":
+            if _consult_has_signal(request, "unfairness", "burden_imbalance", "issue_persisting"):
+                return "お金のことは曖昧だと負担感が偏りやすいから、今後は先に確認して、お互い納得できる形を決めたい。"
+            return "お金のことは気まずくなりやすいからこそ、負担感が偏らない形を一度すり合わせたい。"
+
+        if intent == "boundary":
+            if _consult_has_signal(request, "unfairness", "burden_imbalance"):
+                return "お金のことが曖昧なままだと私はしんどい。今後はその場で流さず、先に確認してからにしたい。"
+            return "お金のことが曖昧なままだと私はしんどい。今後は先に確認してからにしたい。"
+
+        if intent == "express":
+            if _consult_has_signal(request, "unfairness", "burden_imbalance", "resentment_risk"):
+                return "お金のことが続くと、私は少し不公平に感じてしまってしんどい。このまま溜めたくないから、まずはその気持ちだけ伝えさせて。"
+            return "お金のことが続くと、私は少し不公平に感じてしまってしんどい。まずはその気持ちだけ伝えさせて。"
+
+        return "お金のこと、私の中で少し引っかかってる。責めたいわけじゃないから、一度落ち着いて話したい。"
+
+    if theme == "距離感":
+        if intent == "align":
+            if _consult_has_signal(request, "need_space", "partner_feels_distant", "distance_increasing", "relational_freeze"):
+                return "会う頻度や連絡の温度差で、私は少しズレを感じてた。近すぎるとしんどい時もあると思うから、お互いに無理のない距離感を一度すり合わせたい。"
+            return "会う頻度や連絡の温度差で、私は少しズレを感じてた。どの距離感がお互いに楽か、一度すり合わせられたらうれしい。"
+
+        if intent == "express":
+            if _consult_has_signal(request, "distance_increasing", "contact_anxiety", "relational_freeze"):
+                return "最近の距離感で、私は少し寂しさと不安を感じてた。責めたいわけじゃなくて、その変化に戸惑っていたことを伝えたかった。"
+            return "最近の距離感で、私は少し寂しさと不安を感じてた。責めたいわけじゃなくて、その気持ちを伝えたかった。"
+
+        if intent == "boundary":
+            if _consult_has_signal(request, "engulfment_pressure", "active_conflict") or _consult_has_any_key_suffix(request, "|status|o4"):
+                return "今の距離感のままだと、私はしんどくなりやすい。いったん少し自分のペースを大事にしたいと思ってる。"
+            return "今の距離感のままだと、私はしんどくなりやすい。少し自分のペースも大事にしたいと思ってる。"
+
+        if intent == "pause":
+            return "いったん少し落ち着いて、自分の気持ちを整理したい。また話せる時に話したい。"
+
+        if intent == "repair":
+            if _consult_has_signal(request, "contact_anxiety", "active_conflict", "issue_persisting"):
+                return "距離感のことで私も不安から重くなっていたかもしれない。しんどくさせていたらごめん。落ち着いて話せる時に少し話したい。"
+            return "距離感のことで私も不安から重くなっていたかもしれない。責めたいわけじゃないから、落ち着いて話せる時に少し話したい。"
+
+        if intent == "clarify":
+            if _consult_has_signal(request, "need_space", "partner_feels_distant", "distance_increasing"):
+                return "最近の距離感について、私は少し不安になってる。責めたいわけじゃないし、今すぐ返事じゃなくて大丈夫だから、今は少し一人の時間がほしい感じなのか、ただ余裕がないだけなのか知りたい。"
+            return "最近の距離感について、私は少し不安になってる。今は近づきたい気持ちが弱いのか、ただ余裕がないだけなのか知りたい。"
+
+        return "最近の距離感で、私は少し不安になってる。責めたいわけじゃなくて、今どんな感じか知りたい。"
+
+    return None
+
+
+
+def _set_primary_reply(normalized: dict, body: str) -> dict:
+    if not isinstance(normalized, dict):
+        return normalized
+
+    reply_options = normalized.get("reply_options")
+    if isinstance(reply_options, list) and reply_options:
+        first = reply_options[0]
+        if isinstance(first, dict):
+            first["body"] = body
+        else:
+            reply_options[0] = {"body": body}
+        normalized["reply_options"] = reply_options
+        return normalized
+
+    normalized["reply_options"] = [{"body": body}]
+    return normalized
+
+
+def _apply_consult_reply_composer(request, normalized: dict) -> dict:
+    body = _compose_couple_best_reply(request)
+    if not body:
+        return normalized
+    return _set_primary_reply(normalized, body)
+
 def build_consult_input(request) -> str:
     base = _request_to_prompt_lines(
         request,
@@ -771,6 +1179,12 @@ def build_consult_input(request) -> str:
     rules = [
         "[consult_output_rules]",
         "- relation_type / relation_detail_labels / theme / theme_details / current_status / emotion_level / goal を主な判断材料にしてください。",
+        "- theme_detail_keys / current_status_key / goal_key / latent_signals も重要な判断材料にしてください。",
+        f"- semantic_choice_keys: {_compact_case_text(getattr(request, 'theme_detail_keys', []), getattr(request, 'current_status_key', ''), getattr(request, 'goal_key', '')) or 'なし'}",
+        f"- latent_signals: {_compact_case_text(getattr(request, 'latent_signals', [])) or 'なし'}",
+        f"- semantic_focus: {_consult_semantic_focus(request) or '特になし'}",
+        "- theme_detail_keys / current_status_key / goal_key は同じ表現でも意味の違いを分ける内部手がかりです。返答文にそのまま出さず、解釈の分岐にだけ使ってください。",
+        "- latent_signals は表面文言の言い換えではなく、不安・痛点・境界線・修復意図の推定として使ってください。",
         f"- この相談で特に重視する観点: {_consult_case_style(request)}",
         f"- この相談の対立軸: {_consult_case_axis(request)}",
         "- summary の1文目で『誰が・何に・どう困っているか』を、このケースに即してはっきり書いてください。",
@@ -863,7 +1277,7 @@ def create_consult_session(request: ConsultSessionRequest):
         result_text = response.output_text
         result_json = parse_json_text(result_text)
         normalized = normalize_consult_result(result_json)
-
+        normalized = _apply_consult_reply_composer(request, normalized)
         return {"data": normalized}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI consult error: {e}")
