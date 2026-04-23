@@ -1,3 +1,5 @@
+from fastapi.responses import FileResponse
+from pathlib import Path
 import json
 import hashlib
 import os
@@ -26,6 +28,23 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PAGES_DIR = PROJECT_ROOT / "pages"
+
+@app.get("/privacy_policy.html", include_in_schema=False)
+def privacy_policy_html():
+    page = PAGES_DIR / "privacy_policy.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="privacy_policy.html not found")
+    return FileResponse(page)
+
+@app.get("/support.html", include_in_schema=False)
+def support_html():
+    page = PAGES_DIR / "support.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="support.html not found")
+    return FileResponse(page)
 
 @app.get("/")
 def root():
@@ -1734,6 +1753,333 @@ def _gm_apply_consult_reply_composer(request, normalized: dict) -> dict:
 
     return _gm_set_primary_reply(normalized, body, title)
 
+SAFETY_DESTINATION_CATALOG = {
+    "police_emergency": {
+        "key": "police_emergency",
+        "name": "警察",
+        "phone": "110",
+        "reason": "今まさに危険・暴行・脅迫・監禁・待ち伏せなど差し迫った危険があるとき",
+    },
+    "ambulance_fire": {
+        "key": "ambulance_fire",
+        "name": "救急・消防",
+        "phone": "119",
+        "reason": "けが・急病・意識障害など身体の危険があるとき",
+    },
+    "police_consult": {
+        "key": "police_consult",
+        "name": "警察相談専用電話",
+        "phone": "#9110",
+        "reason": "緊急ではないが、安全面の不安、つきまとい、脅し、詐欺などを相談したいとき",
+    },
+    "dv_nav": {
+        "key": "dv_nav",
+        "name": "DV相談ナビ",
+        "phone": "#8008",
+        "reason": "配偶者・恋人・元交際相手などからの暴力や支配があるとき",
+    },
+    "sexual_center": {
+        "key": "sexual_center",
+        "name": "性犯罪・性暴力被害者のためのワンストップ支援センター",
+        "phone": "#8891",
+        "reason": "性暴力・性的強要・同意のない性的接触があるとき",
+    },
+    "sexual_police": {
+        "key": "sexual_police",
+        "name": "性犯罪被害相談電話",
+        "phone": "#8103",
+        "reason": "警察に性被害を相談したいとき",
+    },
+    "mental_health": {
+        "key": "mental_health",
+        "name": "こころの健康相談統一ダイヤル",
+        "phone": "0570-064-556",
+        "reason": "希死念慮、自傷、消えたい気持ち、強い追い詰められ感があるとき",
+    },
+    "child_abuse": {
+        "key": "child_abuse",
+        "name": "児童相談所虐待対応ダイヤル",
+        "phone": "189",
+        "reason": "子どもへの虐待・ネグレクト・強い安全懸念があるとき",
+    },
+    "child_rights": {
+        "key": "child_rights",
+        "name": "子どもの人権110番",
+        "phone": "0120-007-110",
+        "reason": "子どもへの人権侵害やいじめ・家庭内圧力を相談したいとき",
+    },
+    "consumer": {
+        "key": "consumer",
+        "name": "消費者ホットライン",
+        "phone": "188",
+        "reason": "契約トラブル、返金トラブル、悪質商法、詐欺まがいの勧誘があるとき",
+    },
+    "human_rights": {
+        "key": "human_rights",
+        "name": "みんなの人権110番",
+        "phone": "0570-003-110",
+        "reason": "中傷、脅し、差別、ハラスメントなど人権侵害全般を相談したいとき",
+    },
+}
+
+def _s(v):
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, dict):
+        parts = []
+        for k, val in v.items():
+            sv = _s(val)
+            if sv:
+                parts.append(f"{k}: {sv}")
+        return " / ".join(parts)
+    if isinstance(v, (list, tuple, set)):
+        parts = []
+        for item in v:
+            sv = _s(item)
+            if sv:
+                parts.append(sv)
+        return " / ".join(parts)
+    return str(v).strip()
+
+def _arr(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [x for x in (_s(i) for i in v) if x]
+    s = _s(v)
+    return [s] if s else []
+
+def _b(v):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in {"true", "1", "yes", "y"}
+    return bool(v)
+
+def _has(text, words):
+    return any(w in text for w in words)
+
+def build_consult_safety(request, result_json):
+    combined = "\n".join([
+        _s(getattr(request, "relation_type", None)),
+        _s(getattr(request, "relation_detail_labels", None)),
+        _s(getattr(request, "theme", None)),
+        _s(getattr(request, "theme_details", None)),
+        _s(getattr(request, "current_status", None)),
+        _s(getattr(request, "goal", None)),
+        _s(getattr(request, "chat_text", None)),
+        _s(getattr(request, "note", None)),
+        _s(getattr(request, "recent_pattern_summary", None)),
+        _s(result_json.get("situation_summary")),
+        _s(result_json.get("partner_feeling_estimate")),
+        _s(result_json.get("heard_as_interpretations")),
+        _s(result_json.get("avoid_phrases")),
+        _s(result_json.get("next_actions")),
+        _s(result_json.get("pre_send_cautions")),
+        _s(result_json.get("safety_observation")),
+        _s(result_json.get("immediate_next_step")),
+    ])
+
+    flags = []
+
+    def add_flag(flag):
+        if flag not in flags:
+            flags.append(flag)
+
+    if _has(combined, ["殴", "蹴", "首を絞", "殺す", "死ね", "包丁", "刃物", "監禁", "閉じ込め", "今から行く", "待ち伏せ"]):
+        add_flag("physical_violence_or_threat")
+    if _has(combined, ["つきまと", "待ち伏せ", "位置情報", "GPS", "gps", "監視", "家の前", "職場の前"]):
+        add_flag("stalking_or_monitoring")
+    if _has(combined, ["DV", "dv", "モラハラ", "束縛", "支配", "怒鳴", "人格否定", "経済的DV", "経済的dv"]):
+        add_flag("dv_or_coercive_control")
+    if _has(combined, ["性行為を強要", "無理やり", "レイプ", "性暴力", "性被害", "同意なく", "裸の写真", "性的画像"]):
+        add_flag("sexual_violence")
+    if _has(combined, ["死にたい", "消えたい", "自殺", "リスカ", "OD", "od", "オーバードーズ", "いなくなりたい"]):
+        add_flag("self_harm_or_suicidal_ideation")
+    if _has(combined, ["虐待", "ネグレクト", "子どもが怖が", "子供が怖が", "未成年", "育児放棄", "児相"]):
+        add_flag("child_abuse_or_child_safety")
+    if _has(combined, ["いじめ", "学校に行けない", "不登校", "担任", "クラス", "部活"]):
+        add_flag("school_distress")
+    if _has(combined, ["詐欺", "送金", "投資", "副業", "返金されない", "契約トラブル", "解約できない", "違約金"]):
+        add_flag("fraud_or_extortion")
+    if _has(combined, ["脅し", "晒す", "さらす", "拡散する", "中傷", "セクハラ", "パワハラ", "差別"]):
+        add_flag("harassment_or_rights_violation")
+
+    for item in _arr(result_json.get("safety_flags")):
+        normalized = item.strip().lower().replace("-", "_").replace(" ", "_")
+        if normalized and normalized not in flags:
+            flags.append(normalized)
+
+    support = set()
+    for item in _arr(result_json.get("support_recommendation_types")):
+        key = item.strip().lower().replace("-", "_").replace(" ", "_")
+        if key in {
+            "police",
+            "dv",
+            "sexual_violence",
+            "mental_health",
+            "child_abuse",
+            "consumer",
+            "human_rights",
+            "school",
+            "none",
+        }:
+            support.add(key)
+
+    if "physical_violence_or_threat" in flags:
+        support.add("police")
+    if "stalking_or_monitoring" in flags:
+        support.add("police")
+        support.add("human_rights")
+    if "dv_or_coercive_control" in flags:
+        support.add("dv")
+    if "sexual_violence" in flags:
+        support.add("sexual_violence")
+        support.add("police")
+    if "self_harm_or_suicidal_ideation" in flags:
+        support.add("mental_health")
+    if "child_abuse_or_child_safety" in flags:
+        support.add("child_abuse")
+    if "school_distress" in flags:
+        support.add("school")
+        support.add("human_rights")
+    if "fraud_or_extortion" in flags:
+        support.add("consumer")
+        support.add("police")
+    if "harassment_or_rights_violation" in flags:
+        support.add("human_rights")
+
+    emergency_now = _b(result_json.get("emergency_now")) or _has(
+        combined,
+        ["今すぐ逃げ", "今から行く", "待ち伏せ", "監禁", "閉じ込め", "首を絞", "殺す", "包丁", "刃物", "自殺する", "飛び降りる"]
+    )
+
+    ai_urgency = _s(result_json.get("safety_urgency")).lower()
+
+    if emergency_now:
+        risk_level = "emergency"
+    elif (
+        "physical_violence_or_threat" in flags
+        or "sexual_violence" in flags
+        or "self_harm_or_suicidal_ideation" in flags
+        or "child_abuse_or_child_safety" in flags
+    ):
+        risk_level = "high"
+    elif support.intersection({"police", "dv", "consumer", "human_rights", "school", "mental_health"}):
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+
+    rank = {"low": 1, "medium": 2, "high": 3, "emergency": 4}
+    if ai_urgency in rank and rank[ai_urgency] > rank[risk_level]:
+        risk_level = ai_urgency
+
+    destinations = []
+    seen = set()
+
+    def push(key):
+        if key not in seen:
+            destinations.append(SAFETY_DESTINATION_CATALOG[key])
+            seen.add(key)
+
+    if risk_level == "emergency":
+        push("police_emergency")
+        push("ambulance_fire")
+    if "police" in support:
+        push("police_consult")
+    if "dv" in support:
+        push("dv_nav")
+    if "sexual_violence" in support:
+        push("sexual_center")
+        push("sexual_police")
+    if "mental_health" in support:
+        push("mental_health")
+    if "child_abuse" in support:
+        push("child_abuse")
+        push("child_rights")
+    if "consumer" in support:
+        push("consumer")
+    if "human_rights" in support:
+        push("human_rights")
+
+    safety_observation = _s(result_json.get("safety_observation"))
+    if not safety_observation:
+        if risk_level == "low":
+            safety_observation = "現時点では直ちに緊急窓口が必要と断定できる情報は強くありません。"
+        else:
+            safety_observation = "相談内容の中に、安全確保や専門窓口の併用を検討したいサインが含まれる可能性があります。"
+
+    immediate_next_step = _s(result_json.get("immediate_next_step"))
+    if not immediate_next_step:
+        if risk_level == "emergency":
+            immediate_next_step = "返信文より先に、安全確保と緊急連絡を優先してください。"
+        elif risk_level == "high":
+            immediate_next_step = "今日中に専門窓口へつなぐ前提で動いてください。"
+        elif risk_level == "medium":
+            immediate_next_step = "通常の相談に加えて、必要な窓口を早めに併用してください。"
+        else:
+            immediate_next_step = "まず相談内容を整理し、不安が強まるなら専門窓口も使ってください。"
+
+    if risk_level == "emergency":
+        urgency_message = "今は返信文づくりより安全確保が最優先です。差し迫った危険やけががあるなら110または119を優先してください。"
+    elif risk_level == "high":
+        urgency_message = "通常の相談だけで抱えず、今日中の専門相談を強く検討する段階です。"
+    elif risk_level == "medium":
+        urgency_message = "通常の相談に加えて、早めに専門窓口を併用した方がよい可能性があります。"
+    else:
+        urgency_message = "現時点で緊急相談が必須とは限りませんが、不安が強いなら窓口利用は有効です。"
+
+    support_sorted = [x for x in [
+        "police",
+        "dv",
+        "sexual_violence",
+        "mental_health",
+        "child_abuse",
+        "consumer",
+        "human_rights",
+        "school",
+        "none",
+    ] if x in support]
+    if not support_sorted and risk_level == "low":
+        support_sorted = ["none"]
+
+    return {
+        "risk_level": risk_level,
+        "emergency_now": emergency_now,
+        "safety_observation": safety_observation,
+        "risk_flags": flags,
+        "support_recommendation_types": support_sorted,
+        "immediate_next_step": immediate_next_step,
+        "urgency_message": urgency_message,
+        "suggested_destinations": destinations,
+        "show_support_destinations": len(destinations) > 0,
+    }
+
+def build_consult_response_input(request):
+    prompt_text = (
+        build_consult_input(request)
+        + "\n\nスクリーンショットがある場合の追加ルール:\n"
+          "- スクリーンショットは高優先度の事実として読むこと。\n"
+          "- 上から順に読み、誰が何を言ったか、感情の温度、未返信点、繰り返しパターン、悪化トリガーを具体的に拾うこと。\n"
+          "- 補足テキストが短くても、スクリーンショットが十分なら一般論で埋めないこと。\n"
+          "- summary / partner_feeling_estimate / heard_as_interpretations / avoid_phrases / best_reply / other_replies / next_actions / pre_send_cautions に、スクリーンショットの具体情報を必ず反映すること。\n"
+          "\nReturn valid json only."
+    )
+
+    content = [{"type": "input_text", "text": prompt_text}]
+
+    for raw in (request.screenshots_base64 or [])[:10]:
+        raw = str(raw).strip()
+        if not raw:
+            continue
+        image_url = raw if raw.startswith("data:image") else f"data:image/png;base64,{raw}"
+        content.append({"type": "input_image", "image_url": image_url})
+
+    return [{"role": "user", "content": content}]
+
+
 @app.post("/consult/sessions")
 def create_consult_session(request: ConsultSessionRequest):
     if client is None:
@@ -1754,28 +2100,25 @@ def create_consult_session(request: ConsultSessionRequest):
                 "heard_as_interpretations and avoid_phrases must each be arrays of exactly 2 natural Japanese strings. "
                 "next_actions and pre_send_cautions must each be arrays of exactly 3 natural Japanese strings. "
                 "Prioritize concrete, copy-ready Japanese replies over generic advice. "
-                "Do not collapse different cases into the same answer. "
-                "The selected relation, theme, theme details, current status, emotion level, and goal must materially change the output. "
-                "Use relation details, profile context, recent patterns, and readable screenshot cues when available. "
+                "Avoid repetitive template-like wording across different cases. "
+                "Treat screenshots as high-priority evidence when present. "
+"Assess whether the case suggests immediate danger, coercive control, stalking, sexual violence, child safety concerns, self-harm risk, fraud/extortion, or harassment. "
+"In the JSON output, also include: safety_observation (short string), safety_flags (array of short strings), support_recommendation_types (array chosen from police,dv,sexual_violence,mental_health,child_abuse,consumer,human_rights,school,none), emergency_now (boolean), safety_urgency (one of low, medium, high, emergency), and immediate_next_step (short string). "
+"Do not overcall danger when evidence is weak, but do not miss it when evidence is concrete. "
+                "Use relation details, profile context, recent patterns, note text, and screenshots together. "
+                "When screenshots contain usable evidence, prefer them over generic inference. "
                 "When profile_context contains standard or love 16-type labels and short tendency notes, treat them as soft communication hypotheses only. "
                 "Do not stereotype. Use them only to adjust wording, pacing, reassurance, and repair style when consistent with the actual case."
             ),
-            input=[
-                {
-                    "role": "user",
-                    "content": (
-                        build_consult_input(request)
-                        + "\n\nReturn valid json only."
-                    ),
-                }
-            ],
+            input=build_consult_response_input(request),
             text={"format": {"type": "json_object"}},
         )
 
         result_text = response.output_text
         result_json = parse_json_text(result_text)
         normalized = normalize_consult_result(result_json)
-        normalized = _gm_apply_consult_reply_composer(request, normalized)
+        normalized["safety"] = build_consult_safety(request, result_json)
+
         return {"data": normalized}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI consult error: {e}")
