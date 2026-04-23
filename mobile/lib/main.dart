@@ -5709,7 +5709,9 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'relation_type': _canonicalRelationType(widget.draft.relationType ?? ''),
+          'relation_type': _canonicalRelationType(
+            widget.draft.relationType ?? '',
+          ),
           'relation_detail_labels': widget.draft.relationDetails,
           'theme': widget.draft.theme,
           'theme_details': widget.draft.themeAnswers,
@@ -6397,7 +6399,9 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'relation_type': _canonicalRelationType(widget.draft.relationType ?? ''),
+          'relation_type': _canonicalRelationType(
+            widget.draft.relationType ?? '',
+          ),
           'relation_detail_labels': widget.draft.relationDetails,
           'draft_message': widget.draft.draftMessage,
           'optional_context_text': widget.draft.optionalContextText,
