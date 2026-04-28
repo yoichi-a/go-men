@@ -7,6 +7,65 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'go_men_billing_service.dart';
 
+const String _goMenApiBaseUrl = String.fromEnvironment(
+  'GO_MEN_API_BASE_URL',
+  defaultValue: 'https://go-men.onrender.com',
+);
+
+const String _aiDataSharingConsentPrefsKey =
+    'go_men_ai_data_sharing_consent_v1';
+
+Future<bool> ensureAiDataSharingConsent(BuildContext context) async {
+  final prefs = await SharedPreferences.getInstance();
+  final alreadyConsented =
+      prefs.getBool(_aiDataSharingConsentPrefsKey) ?? false;
+
+  if (alreadyConsented) {
+    return true;
+  }
+
+  if (!context.mounted) {
+    return false;
+  }
+
+  final agreed =
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('AI機能の利用に関する同意'),
+            content: const SingleChildScrollView(
+              child: Text(
+                'Go-menでは、相談内容、送信前チェックの文章、相性診断に関する入力、関係性プロフィール、自由入力メモ、アップロードされたスクリーンショットなど、あなたが入力・選択した情報を、AI応答生成のために本サービスのサーバーを経由してOpenAIへ送信する場合があります。\n\n'
+                '送信先には、AI応答生成を行うOpenAIと、サーバー運用に必要なホスティング事業者であるRenderが含まれます。\n\n'
+                '送信された情報は、返信候補の生成、相談内容の整理、送信前チェック、相性診断、品質維持、不正利用防止などの目的で処理されます。\n\n'
+                '氏名、住所、電話番号、勤務先、病歴、金銭情報、他人の秘密など、入力する必要のない個人情報や機密情報は入力しないでください。\n\n'
+                '上記に同意した場合のみ、AI機能を利用できます。',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('同意しない'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('同意してAI機能を使う'),
+              ),
+            ],
+          );
+        },
+      ) ??
+      false;
+
+  if (agreed) {
+    await prefs.setBool(_aiDataSharingConsentPrefsKey, true);
+  }
+
+  return agreed;
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GoMenPlanStorage.ensureLoaded();
@@ -684,6 +743,17 @@ class GoMenApp extends StatelessWidget {
 
 const double kAppMaxWidth = 460;
 
+String goMenLogoAssetFor(GoMenThemeMode mode) {
+  switch (mode) {
+    case GoMenThemeMode.gold:
+      return 'assets/images/logo_gold.png';
+    case GoMenThemeMode.pink:
+      return 'assets/images/logo_pink.png';
+    case GoMenThemeMode.ivory:
+      return 'assets/images/logo_ivory.png';
+  }
+}
+
 class _AppViewport extends StatelessWidget {
   const _AppViewport({required this.child});
 
@@ -1094,6 +1164,79 @@ class PrecheckDraft {
   }
 }
 
+class SafetyDestination {
+  const SafetyDestination({
+    required this.key,
+    required this.name,
+    required this.phone,
+    required this.reason,
+  });
+
+  final String key;
+  final String name;
+  final String phone;
+  final String reason;
+
+  factory SafetyDestination.fromJson(Map<String, dynamic> json) {
+    return SafetyDestination(
+      key: (json['key'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      phone: (json['phone'] ?? '').toString(),
+      reason: (json['reason'] ?? '').toString(),
+    );
+  }
+}
+
+class ConsultationSafety {
+  const ConsultationSafety({
+    required this.riskLevel,
+    required this.emergencyNow,
+    required this.safetyObservation,
+    required this.riskFlags,
+    required this.supportRecommendationTypes,
+    required this.immediateNextStep,
+    required this.urgencyMessage,
+    required this.suggestedDestinations,
+    required this.showSupportDestinations,
+  });
+
+  final String riskLevel;
+  final bool emergencyNow;
+  final String safetyObservation;
+  final List<String> riskFlags;
+  final List<String> supportRecommendationTypes;
+  final String immediateNextStep;
+  final String urgencyMessage;
+  final List<SafetyDestination> suggestedDestinations;
+  final bool showSupportDestinations;
+
+  factory ConsultationSafety.fromJson(Map<String, dynamic> json) {
+    return ConsultationSafety(
+      riskLevel: (json['risk_level'] ?? 'low').toString(),
+      emergencyNow: json['emergency_now'] == true,
+      safetyObservation: (json['safety_observation'] ?? '').toString(),
+      riskFlags: ((json['risk_flags'] as List?) ?? const [])
+          .whereType<String>()
+          .toList(),
+      supportRecommendationTypes:
+          ((json['support_recommendation_types'] as List?) ?? const [])
+              .whereType<String>()
+              .toList(),
+      immediateNextStep: (json['immediate_next_step'] ?? '').toString(),
+      urgencyMessage: (json['urgency_message'] ?? '').toString(),
+      suggestedDestinations:
+          ((json['suggested_destinations'] as List?) ?? const [])
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    SafetyDestination.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList(),
+      showSupportDestinations: json['show_support_destinations'] == true,
+    );
+  }
+}
+
 class ConsultationResult {
   const ConsultationResult({
     required this.sendTimingLabel,
@@ -1105,6 +1248,7 @@ class ConsultationResult {
     required this.replyOptions,
     required this.nextActions,
     required this.preSendCautions,
+    this.safety,
   });
 
   final String sendTimingLabel;
@@ -1116,6 +1260,7 @@ class ConsultationResult {
   final List<ReplyOption> replyOptions;
   final List<String> nextActions;
   final List<String> preSendCautions;
+  final ConsultationSafety? safety;
 
   factory ConsultationResult.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>;
@@ -1146,6 +1291,9 @@ class ConsultationResult {
       nextActions: (data['next_actions'] as List<dynamic>).cast<String>(),
       preSendCautions: (data['pre_send_cautions'] as List<dynamic>)
           .cast<String>(),
+      safety: data['safety'] is Map<String, dynamic>
+          ? ConsultationSafety.fromJson(data['safety'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -2226,10 +2374,15 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               children: [
                 const SizedBox(height: 24),
-                Text(
-                  'Go-men',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                ValueListenableBuilder<GoMenThemeMode>(
+                  valueListenable: GoMenThemeStorage.notifier,
+                  builder: (context, mode, _) {
+                    return Image.asset(
+                      goMenLogoAssetFor(mode),
+                      height: 96,
+                      fit: BoxFit.contain,
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -3436,17 +3589,24 @@ class FamilyParentGenderScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSelfParent = draft.relationDetails.contains('自分: 親');
+    final question = isSelfParent ? '子は？' : '親は？';
+    final options = isSelfParent
+        ? const ['息子', '娘', '答えない']
+        : const ['父', '母', '答えない'];
+    final label = isSelfParent ? '子' : '親';
+
     return RelationSingleChoiceScreen(
       title: 'もう少し関係を教えてください',
-      subtitle: 'この違いも会話のトーンに影響します',
-      question: '親は？',
-      options: const ['母', '父', '答えない'],
+      subtitle: 'ここも会話のトーンに影響します',
+      question: question,
+      options: options,
       onSelected: (context, value) {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => ThemeSelectionScreen(
               draft: draft.copyWith(
-                relationDetails: [...draft.relationDetails, '親: $value'],
+                relationDetails: [...draft.relationDetails, '$label: $value'],
               ),
             ),
           ),
@@ -5322,9 +5482,15 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
     final remaining = maxCount - _pickedScreenshots.length;
 
     if (remaining <= 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('スクショは最大$maxCount枚までです')));
+      if (GoMenPlanStorage.isProSync) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('スクショは最大$maxCount枚までです')));
+      } else {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ProPlanScreen()));
+      }
       return;
     }
 
@@ -5621,6 +5787,7 @@ class _NoteScreenState extends State<NoteScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
+              maxLength: 400,
               controller: _noteController,
               maxLines: 8,
               decoration: const InputDecoration(
@@ -5699,7 +5866,17 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
     }
 
     try {
-      final uri = Uri.parse('http://127.0.0.1:8000/consult/sessions');
+      if (!mounted) return;
+      final aiConsentGranted = await ensureAiDataSharingConsent(context);
+      if (!aiConsentGranted) {
+        if (!mounted) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+
+      final uri = Uri.parse('$_goMenApiBaseUrl/consult/sessions');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
@@ -6389,7 +6566,17 @@ class _PrecheckAnalyzeScreenState extends State<PrecheckAnalyzeScreen> {
     }
 
     try {
-      final uri = Uri.parse('http://127.0.0.1:8000/precheck');
+      if (!mounted) return;
+      final aiConsentGranted = await ensureAiDataSharingConsent(context);
+      if (!aiConsentGranted) {
+        if (!mounted) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+
+      final uri = Uri.parse('$_goMenApiBaseUrl/precheck');
       final profile = widget.draft.selectedProfile;
       final recentPatternSummary = profile == null
           ? null
@@ -6536,6 +6723,11 @@ class ResultScreen extends StatelessWidget {
               headline: result.sendTimingLabel,
               body: result.sendTimingReason,
             ),
+            if (result.safety != null &&
+                (result.safety!.showSupportDestinations ||
+                    result.safety!.riskLevel != 'low' ||
+                    result.safety!.safetyObservation.isNotEmpty))
+              _SafetyResultCard(safety: result.safety!),
             if (bestReply != null)
               _HeroReplyCard(
                 title: bestReply.title,
@@ -6585,28 +6777,6 @@ class ResultScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => PrecheckInputScreen(
-                      initialProfile: draft.selectedProfile,
-                      initialDraft: PrecheckDraft(
-                        relationType: draft.relationType,
-                        relationLabel: draft.relationLabel,
-                        relationDetails: draft.relationDetails,
-                        selectedProfile: draft.selectedProfile,
-                      ),
-                    ),
-                  ),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-              ),
-              child: Text('自分の文をチェックする', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pushAndRemoveUntil(
@@ -6621,6 +6791,102 @@ class ResultScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SafetyResultCard extends StatelessWidget {
+  const _SafetyResultCard({required this.safety});
+
+  final ConsultationSafety safety;
+
+  String get riskLabel {
+    switch (safety.riskLevel) {
+      case 'emergency':
+        return '緊急';
+      case 'high':
+        return '高い';
+      case 'medium':
+        return '注意';
+      default:
+        return '低め';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (safety.riskLevel == 'low') {
+      return const SizedBox.shrink();
+    }
+
+    return _ResultCard(
+      title: '安全確認',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '危険サイン: $riskLabel',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          if (safety.emergencyNow) ...[
+            const SizedBox(height: 10),
+            const Text(
+              '今は返信文よりも、安全確保を優先してください。',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+          if (safety.safetyObservation.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(safety.safetyObservation),
+          ],
+          if (safety.urgencyMessage.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(safety.urgencyMessage),
+          ],
+          if (safety.immediateNextStep.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'まずやること',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text('・${safety.immediateNextStep}'),
+          ],
+          if (safety.suggestedDestinations.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              '相談先',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...safety.suggestedDestinations.map(
+              (item) => Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.black12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.name}  ${item.phone}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(item.reason),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -6797,6 +7063,7 @@ Future<void> setDebugPlanAndNormalizeTheme(
   BuildContext context,
   GoMenPlan plan,
 ) async {
+  if (const bool.fromEnvironment('dart.vm.product')) return;
   await GoMenPlanStorage.setPlan(plan);
 
   final currentTheme = GoMenThemeStorage.notifier.value;
@@ -6826,9 +7093,9 @@ class SettingsHubScreen extends StatelessWidget {
     final spec = goMenThemeSpecFor(mode);
 
     if (!GoMenThemeStorage.canUse(mode)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${spec.label} テーマは Go-men Pro で利用できます')),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ProPlanScreen()));
       return;
     }
 
@@ -6993,7 +7260,7 @@ class SettingsHubScreen extends StatelessWidget {
             _SettingsNavCard(
               icon: Icons.workspace_premium_outlined,
               title: 'Go-men Pro',
-              subtitle: '無料版 / 有料版の違い',
+              subtitle: '月額Proの内容を見る',
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ProPlanScreen()),
@@ -7060,44 +7327,24 @@ class SettingsHubScreen extends StatelessWidget {
                         const Divider(height: 1),
                         const SizedBox(height: 16),
                         Text(
-                          '開発用プラン切り替え',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'App Store 課金導入前の確認用です',
+                          isPro
+                              ? '購入状態の確認や復元は Go-men Pro 画面から行えます。'
+                              : 'Gold / Pink テーマ、相性採点、複数プロフィールは Go-men Pro で利用できます。',
                           style: TextStyle(fontSize: 13),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: isPro
-                                    ? () => setDebugPlanAndNormalizeTheme(
-                                        context,
-                                        GoMenPlan.free,
-                                      )
-                                    : null,
-                                child: Text('無料版にする'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: isPro
-                                    ? null
-                                    : () => setDebugPlanAndNormalizeTheme(
-                                        context,
-                                        GoMenPlan.pro,
-                                      ),
-                                child: Text('Pro にする'),
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ProPlanScreen(),
+                                ),
+                              );
+                            },
+                            child: Text(isPro ? '購入情報を確認する' : 'Go-men Proを見る'),
+                          ),
                         ),
                       ],
                     );
@@ -7259,25 +7506,51 @@ class PrivacyPolicyScreen extends StatelessWidget {
         _LegalSection(
           title: '1. 取得する情報',
           body:
-              'Go-men は、相談内容、送信前チェックの文章、関係性プロフィール、保存した結果など、ユーザーが入力した情報を取り扱います。',
+              'Go-menは、相談内容、送信前チェックの文章、相性診断に関する入力、関係性プロフィール、選択した設定、自由入力メモ、アップロードされたスクリーンショット、保存した結果、利用状況や不具合調査に必要な技術情報、サブスクリプション状態などを取り扱うことがあります。',
         ),
         _LegalSection(
-          title: '2. 利用目的',
-          body: '取得した情報は、返信候補の生成、送信前チェック、プロフィールに応じた提案、履歴表示などの機能提供のために使用します。',
-        ),
-        _LegalSection(
-          title: '3. 外部サービスへの送信',
+          title: '2. 情報の取得方法',
           body:
-              'AIによる分析を行うため、入力内容の一部がサーバー経由で外部AIサービスに送信される場合があります。個人情報や極めて機微な情報は、必要最小限にとどめてください。',
+              'これらの情報は、ユーザーがアプリ内で入力、選択、保存、アップロードする方法、AI機能を利用する方法、お問い合わせ時に送信する方法、または不具合対応やセキュリティ確保のために技術情報が自動的に記録される方法により取得されます。',
         ),
         _LegalSection(
-          title: '4. 保存について',
+          title: '3. 利用目的',
           body:
-              '保存機能をオンにした場合、相談結果や送信前チェック結果は端末内または提供環境内に保持されることがあります。共有端末では取り扱いに注意してください。',
+              '取得した情報は、返信候補の生成、送信前チェック、相談内容の整理、相性診断、プロフィールに応じた提案、履歴表示、サービス改善、不具合対応、セキュリティ確保、不正利用防止、お問い合わせ対応のために使用します。',
         ),
         _LegalSection(
-          title: '5. お問い合わせ',
-          body: '本ポリシーに関するお問い合わせは、設定内のお問い合わせ先をご確認ください。',
+          title: '4. 外部AIサービス等への送信',
+          body:
+              'AI機能を利用する場合、ユーザーが入力・選択・アップロードした情報の一部が、本サービスのサーバーを経由して第三者AIサービスであるOpenAIに送信される場合があります。また、サーバー運用にはRender、アプリ内課金にはAppleの仕組みを利用します。',
+        ),
+        _LegalSection(
+          title: '5. 同意と第三者保護',
+          body:
+              'AI機能を利用する前に、送信される情報、送信先、利用目的を説明し、ユーザーの同意を取得します。同意しない場合、AI機能のために情報はOpenAIへ送信されません。外部サービス事業者については、本サービスの提供目的に必要な範囲で情報を処理し、本ポリシーと同等またはそれ以上の保護が確保されるよう適切なサービスおよび契約条件を選定します。',
+        ),
+        _LegalSection(
+          title: '6. 第三者提供・販売禁止',
+          body:
+              'Go-menは、ユーザーの個人情報を販売しません。法令に基づく場合を除き、本ポリシーに記載した目的の範囲を超えて第三者に提供しません。',
+        ),
+        _LegalSection(
+          title: '7. 保存と削除',
+          body:
+              '保存機能を利用した場合、相談結果、送信前チェック結果、プロフィール、AI出力結果などは端末内または本サービスが管理する環境に保存されることがあります。ユーザーは、アプリ内の機能により、保存されたプロフィールや履歴を削除できる場合があります。',
+        ),
+        _LegalSection(
+          title: '8. 入力時の注意',
+          body:
+              '氏名、住所、電話番号、勤務先、病歴、金銭情報、本人確認書類、他人の秘密など、入力する必要のない個人情報や機密情報は入力しないでください。スクリーンショットを追加する場合は、必要に応じて氏名、連絡先、住所、顔写真等を隠してから利用してください。',
+        ),
+        _LegalSection(
+          title: '9. 免責・緊急時',
+          body:
+              'Go-menはコミュニケーション支援を目的とするものであり、医療、法律、緊急対応、危機介入、カウンセリングその他の専門的判断を代替するものではありません。緊急性が高い場合や身の危険を感じる場合は、警察、自治体、公的相談窓口、医療機関その他の専門窓口にご相談ください。',
+        ),
+        _LegalSection(
+          title: '10. お問い合わせ',
+          body: '本ポリシーに関するお問い合わせは、gomen.mendly@gmail.com までご連絡ください。',
         ),
       ],
     );
@@ -7447,8 +7720,15 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
             widget.profile.id,
           );
 
+      if (!mounted) return;
+      final aiConsentGranted = await ensureAiDataSharingConsent(context);
+      if (!aiConsentGranted) {
+        if (!mounted) return;
+        return;
+      }
+
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/compatibility/score'),
+        Uri.parse('$_goMenApiBaseUrl/compatibility/score'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'relation_type': widget.profile.relationType,
@@ -7992,12 +8272,21 @@ class _ProfileManagerScreenState extends State<ProfileManagerScreen> {
                     onPressed: canAddMore
                         ? () => _openEditor()
                         : () {
-                            final message = _plan == GoMenPlan.pro
-                                ? 'これ以上プロフィールを増やせません。不要なプロフィールを整理してください。'
-                                : '無料版ではプロフィールは1件までです。Go-men Pro で複数プロフィールを使えます。';
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(SnackBar(content: Text(message)));
+                            if (_plan == GoMenPlan.pro) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'これ以上プロフィールを増やせません。不要なプロフィールを整理してください。',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProPlanScreen(),
+                              ),
+                            );
                           },
                     child: Text(canAddMore ? 'プロフィールを追加する' : 'プロフィール上限に達しています'),
                   ),
@@ -8082,7 +8371,7 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                             Text(
                               isPro
                                   ? '現在 Go-men Pro を利用中です'
-                                  : 'Go-men Pro にアップグレード',
+                                  : 'Go-men Pro（月額）を開始',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 fontSize: 24,
@@ -8093,7 +8382,7 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                             Text(
                               isPro
                                   ? '購入状態はアプリ内で反映済みです。復元や再取得もこの画面から実行できます。'
-                                  : '本物の App Store 購入導線をここから使います。',
+                                  : 'App Store の月額サブスクリプションとして購入・復元できます。\n自動更新型のProプランです。',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 15,
@@ -8194,7 +8483,7 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                                     ? 'Pro有効化済み'
                                     : _billing.isPurchasePending
                                     ? '購入処理中...'
-                                    : 'App StoreでProを購入',
+                                    : 'App Storeで月額Proを購入',
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -8221,7 +8510,7 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      '※ 現段階では購入成功時にアプリ内の Pro 状態を反映します。次の段階で server 側の購入検証をつなぎます。',
+                      '※ 購入状態が反映されない場合は「購入を復元」をお試しください。',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,

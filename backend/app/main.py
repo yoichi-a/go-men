@@ -50,21 +50,25 @@ def resolve_pages_dir() -> Path:
 
 PAGES_DIR = resolve_pages_dir()
 
-@app.get("/privacy_policy.html", include_in_schema=False)
+@app.api_route("/privacy", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/privacy-policy", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/privacy_policy.html", methods=["GET", "HEAD"], include_in_schema=False)
 def privacy_policy_html():
     page = PAGES_DIR / "privacy_policy.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="privacy_policy.html not found")
     return FileResponse(page)
 
-@app.get("/support.html", include_in_schema=False)
+@app.api_route("/support", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/support.html", methods=["GET", "HEAD"], include_in_schema=False)
 def support_html():
     page = PAGES_DIR / "support.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="support.html not found")
     return FileResponse(page)
 
-@app.get("/terms.html", include_in_schema=False)
+@app.api_route("/terms", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/terms.html", methods=["GET", "HEAD"], include_in_schema=False)
 def terms_html():
     page = PAGES_DIR / "terms.html"
     if not page.exists():
