@@ -39,7 +39,7 @@ class GoMenBillingService extends ChangeNotifier {
     await reload();
   }
 
-  Future<void> reload() async {
+  Future<void> reload({bool userInitiated = false}) async {
     isLoading = true;
     errorText = null;
     notifyListeners();
