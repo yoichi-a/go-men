@@ -102,6 +102,9 @@ class ConsultSessionRequest(BaseModel):
     recent_pattern_summary: Optional[str] = None
     recent_consultation_history: List[str] = Field(default_factory=list)
     screenshots_base64: List[str] = Field(default_factory=list)
+    screenshot_names: List[str] = Field(default_factory=list)
+    structured_choice_context: dict[str, Any] = Field(default_factory=dict)
+    input_priority_policy: Optional[str] = None
     upload_ids: List[str] = Field(default_factory=list)
     latent_signals: List[str] = Field(default_factory=list)
 
@@ -266,6 +269,7 @@ def normalize_consult_result(data: dict[str, Any]) -> dict[str, Any]:
         3,
         "送る前の注意",
     )
+    screenshot_observations = _to_string_list(data.get("screenshot_observations"))[:5]
 
     send_timing_label = _first_text(
         data.get("send_timing"),
@@ -304,6 +308,7 @@ def normalize_consult_result(data: dict[str, Any]) -> dict[str, Any]:
         "reply_options": reply_options,
         "next_actions": next_actions,
         "pre_send_cautions": pre_send_cautions,
+        "screenshot_observations": screenshot_observations,
     }
 
 
@@ -1537,9 +1542,13 @@ def build_consult_input(request) -> str:
         "- relation_type / relation_detail_labels / theme / theme_details / current_status / emotion_level / goal を主な判断材料にしてください。",
         "- theme_detail_keys / current_status_key / goal_key / latent_signals も重要な判断材料にしてください。",
         f"- semantic_choice_keys: {_compact_case_text(getattr(request, 'theme_detail_keys', []), getattr(request, 'current_status_key', ''), getattr(request, 'goal_key', '')) or 'なし'}",
+        f"- structured_choice_context: {_compact_case_text(getattr(request, 'structured_choice_context', {})) or 'なし'}",
+        f"- input_priority_policy: {_compact_case_text(getattr(request, 'input_priority_policy', '')) or 'screenshots > chat_text > note > choices > profile'}",
         f"- latent_signals: {_compact_case_text(getattr(request, 'latent_signals', [])) or 'なし'}",
         f"- semantic_focus: {_consult_semantic_focus(request) or '特になし'}",
         "- theme_detail_keys / current_status_key / goal_key は同じ表現でも意味の違いを分ける内部手がかりです。返答文にそのまま出さず、解釈の分岐にだけ使ってください。",
+        "- 入力の優先順位は screenshots > chat_text > note > structured choices > profile_context です。スクショがある場合は実際の会話証拠を最優先してください。",
+        "- JSONには screenshot_observations も含め、スクショから読み取った具体的事実を最大5件で返してください。スクショがない/読めない場合は空配列で返してください。",
         "- latent_signals は表面文言の言い換えではなく、不安・痛点・境界線・修復意図の推定として使ってください。",
         f"- この相談で特に重視する観点: {_consult_case_style(request)}",
         f"- この相談の対立軸: {_consult_case_axis(request)}",
@@ -2094,6 +2103,7 @@ def build_consult_response_input(request):
           "- 上から順に読み、誰が何を言ったか、感情の温度、未返信点、繰り返しパターン、悪化トリガーを具体的に拾うこと。\n"
           "- 補足テキストが短くても、スクリーンショットが十分なら一般論で埋めないこと。\n"
           "- summary / partner_feeling_estimate / heard_as_interpretations / avoid_phrases / best_reply / other_replies / next_actions / pre_send_cautions に、スクリーンショットの具体情報を必ず反映すること。\n"
+          "- スクショから実際に読み取った事実は screenshot_observations に最大5件で返すこと。推測ではなく、会話上の根拠に近い観察を書くこと。\n"
           "\nReturn valid json only."
     )
 
@@ -2123,7 +2133,7 @@ def create_consult_session(request: ConsultSessionRequest):
             instructions=(
                 "You are a careful relationship mediation assistant. "
                 "Output valid JSON only. "
-                "Always return these JSON keys: summary, partner_feeling_estimate, send_timing, send_timing_reason, best_reply, other_replies, heard_as_interpretations, avoid_phrases, next_actions, pre_send_cautions. "
+                "Always return these JSON keys: summary, partner_feeling_estimate, send_timing, send_timing_reason, best_reply, other_replies, heard_as_interpretations, avoid_phrases, next_actions, pre_send_cautions, screenshot_observations. "
                 "best_reply must be an object with title and body. "
                 "other_replies must be an array of exactly 2 objects with title and body. "
                 "heard_as_interpretations and avoid_phrases must each be arrays of exactly 2 natural Japanese strings. "

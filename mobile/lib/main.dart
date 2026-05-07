@@ -6,6 +6,21 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'go_men_billing_service.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+const String _goMenTermsUrl = 'https://go-men.onrender.com/terms.html';
+const String _goMenPrivacyUrl =
+    'https://go-men.onrender.com/privacy_policy.html';
+
+Future<void> openGoMenLegalUrl(String url) async {
+  final uri = Uri.parse(url);
+  final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  if (!opened) {
+    throw Exception('URLを開けませんでした: $url');
+  }
+}
 
 const String _goMenApiBaseUrl = String.fromEnvironment(
   'GO_MEN_API_BASE_URL',
@@ -1248,6 +1263,7 @@ class ConsultationResult {
     required this.replyOptions,
     required this.nextActions,
     required this.preSendCautions,
+    required this.screenshotObservations,
     this.safety,
   });
 
@@ -1260,6 +1276,7 @@ class ConsultationResult {
   final List<ReplyOption> replyOptions;
   final List<String> nextActions;
   final List<String> preSendCautions;
+  final List<String> screenshotObservations;
   final ConsultationSafety? safety;
 
   factory ConsultationResult.fromJson(Map<String, dynamic> json) {
@@ -1291,6 +1308,10 @@ class ConsultationResult {
       nextActions: (data['next_actions'] as List<dynamic>).cast<String>(),
       preSendCautions: (data['pre_send_cautions'] as List<dynamic>)
           .cast<String>(),
+      screenshotObservations:
+          ((data['screenshot_observations'] as List?) ?? const [])
+              .whereType<String>()
+              .toList(),
       safety: data['safety'] is Map<String, dynamic>
           ? ConsultationSafety.fromJson(data['safety'] as Map<String, dynamic>)
           : null,
@@ -3811,9 +3832,17 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   );
 
   String _answerKey(int questionIndex, int optionIndex) {
-    final relation = (widget.draft.relationType ?? 'unknown').trim();
-    final theme = (widget.draft.theme ?? 'その他').trim();
-    return '$relation|$theme|q${questionIndex + 1}|o${optionIndex + 1}';
+    String keyPart(String value) =>
+        value.trim().replaceAll(RegExp(r'\s+'), '_').replaceAll('|', '／');
+
+    final relation = keyPart(widget.draft.relationType ?? 'unknown');
+    final theme = keyPart(widget.draft.theme ?? 'その他');
+    final question = questions[questionIndex];
+    final questionKey = keyPart(question.title);
+    final optionKey = optionIndex >= 0 && optionIndex < question.options.length
+        ? keyPart(question.options[optionIndex])
+        : 'option_${optionIndex + 1}';
+    return '$relation|$theme|$questionKey|$optionKey';
   }
 
   void _selectAnswer(String answer, int optionIndex) {
@@ -5047,8 +5076,13 @@ class EmotionLevelScreen extends StatelessWidget {
   void _selectEmotion(BuildContext context, String emotionLevel) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            GoalScreen(draft: draft.copyWith(emotionLevel: emotionLevel)),
+        builder: (_) => EvidenceInputScreen(
+          draft: draft.copyWith(
+            emotionLevel: emotionLevel,
+            goal: '相談内容を整理して、関係を悪化させにくい一手を知りたい',
+            goalKey: 'auto_consult_next_step',
+          ),
+        ),
       ),
     );
   }
@@ -5500,8 +5534,8 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
 
     try {
       final files = await _picker.pickMultiImage(
-        imageQuality: 85,
-        maxWidth: 1600,
+        imageQuality: 95,
+        maxWidth: 2048,
       );
 
       if (files.isEmpty) return;
@@ -5644,7 +5678,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
     return ConsultationScaffold(
       currentStep: 7,
       title: 'やり取りがあれば追加してください',
-      subtitle: '任意です。なくても相談できます',
+      subtitle: '任意です。スクショがある場合は会話証拠として優先して読みます',
       meta: 'Q4: ${widget.draft.goal}',
       child: Expanded(
         child: SingleChildScrollView(
@@ -5661,7 +5695,7 @@ class _EvidenceInputScreenState extends State<EvidenceInputScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'スクリーンショットを1枚ずつ追加できます。',
+                'スクショは回答の主証拠として読みます。古い順に選ぶと精度が上がります。',
                 style: TextStyle(
                   fontSize: 13,
                   color: goMenMutedTextColor(context),
@@ -5893,6 +5927,18 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           'theme': widget.draft.theme,
           'theme_details': widget.draft.themeAnswers,
           'theme_detail_keys': widget.draft.themeAnswerKeys,
+          'structured_choice_context': {
+            'theme_detail_keys': widget.draft.themeAnswerKeys,
+            'current_status_key': widget.draft.currentStatusKey,
+            'goal_key': widget.draft.goalKey,
+            'priority': [
+              'screenshots',
+              'chat_text',
+              'note',
+              'choices',
+              'profile',
+            ],
+          },
           'current_status': widget.draft.currentStatus,
           'current_status_key': widget.draft.currentStatusKey,
           'emotion_level': widget.draft.emotionLevel,
@@ -5906,6 +5952,11 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           'screenshots_base64': widget.draft.screenshots
               .map((e) => e.bytesBase64)
               .toList(),
+          'screenshot_names': widget.draft.screenshots
+              .map((e) => e.name)
+              .toList(),
+          'input_priority_policy':
+              'screenshots > chat_text > note > structured_choices > profile_context. If screenshots and text conflict, prefer screenshots unless the user explicitly corrects them.',
           'upload_ids': <String>[],
         }),
       );
@@ -6728,6 +6779,21 @@ class ResultScreen extends StatelessWidget {
                     result.safety!.riskLevel != 'low' ||
                     result.safety!.safetyObservation.isNotEmpty))
               _SafetyResultCard(safety: result.safety!),
+            if (result.screenshotObservations.isNotEmpty)
+              _ResultCard(
+                title: 'スクショから読み取ったこと',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: result.screenshotObservations
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('・$item'),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
             if (bestReply != null)
               _HeroReplyCard(
                 title: bestReply.title,
@@ -7279,6 +7345,67 @@ class SettingsHubScreen extends StatelessWidget {
               },
             ),
             const SizedBox(height: 24),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'サブスクリプションに関する重要情報',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Go-men Proは自動更新型の月額サブスクリプションです。購入前に利用規約とプライバシーポリシーをご確認ください。',
+                      style: TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          try {
+                            await openGoMenLegalUrl(_goMenTermsUrl);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('利用規約を開けませんでした: $e')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('利用規約（EULA）を開く'),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          try {
+                            await openGoMenLegalUrl(_goMenPrivacyUrl);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('プライバシーポリシーを開けませんでした: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('プライバシーポリシーを開く'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -8345,6 +8472,38 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
     );
   }
 
+  Widget _purchaseInfoMessage(BuildContext context, ProductDetails? product) {
+    if (product != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('商品: ${product.title}', style: const TextStyle(fontSize: 15)),
+          const SizedBox(height: 6),
+          Text(
+            '価格: ${product.price}',
+            style: TextStyle(fontSize: 15, color: goMenMutedTextColor(context)),
+          ),
+        ],
+      );
+    }
+
+    if (_billing.isLoading) {
+      return Text(
+        'App Storeの購入情報を読み込み中です。',
+        style: TextStyle(fontSize: 15, color: goMenMutedTextColor(context)),
+      );
+    }
+
+    return Text(
+      'App Storeの購入情報を確認しています。表示されない場合は、少し時間をおいて「商品情報を再取得」をお試しください。',
+      style: TextStyle(
+        fontSize: 15,
+        height: 1.6,
+        color: goMenMutedTextColor(context),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -8359,6 +8518,10 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
               animation: _billing,
               builder: (context, _) {
                 final product = _billing.product;
+                final canPurchase =
+                    !isPro && !_billing.isPurchasePending && product != null;
+                final canRetry =
+                    !isPro && !_billing.isPurchasePending && product == null;
 
                 return ListView(
                   padding: const EdgeInsets.all(20),
@@ -8435,55 +8598,28 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                               ),
                             ),
                             const SizedBox(height: 10),
-                            if (product != null) ...[
-                              Text(
-                                '商品: ${product.title}',
-                                style: const TextStyle(fontSize: 15),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '価格: ${product.price}',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: goMenMutedTextColor(context),
-                                ),
-                              ),
-                            ] else ...[
-                              Text(
-                                '商品情報を読み込み中です。',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: goMenMutedTextColor(context),
-                                ),
-                              ),
-                            ],
-                            if (_billing.errorText != null) ...[
-                              const SizedBox(height: 14),
-                              Text(
-                                _billing.errorText!,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.red,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
+                            _purchaseInfoMessage(context, product),
                             const SizedBox(height: 18),
                             ElevatedButton(
-                              onPressed:
-                                  (isPro ||
-                                      _billing.isPurchasePending ||
-                                      product == null)
+                              onPressed: isPro || _billing.isPurchasePending
                                   ? null
-                                  : () {
+                                  : canPurchase
+                                  ? () {
                                       _billing.buyPro();
-                                    },
+                                    }
+                                  : canRetry
+                                  ? () {
+                                      _billing.reload(userInitiated: true);
+                                    }
+                                  : null,
                               child: Text(
                                 isPro
                                     ? 'Pro有効化済み'
                                     : _billing.isPurchasePending
                                     ? '購入処理中...'
-                                    : 'App Storeで月額Proを購入',
+                                    : product != null
+                                    ? 'App Storeで月額Proを購入'
+                                    : '商品情報を再取得',
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -8495,15 +8631,17 @@ class _ProPlanScreenState extends State<ProPlanScreen> {
                                     },
                               child: const Text('購入を復元'),
                             ),
-                            const SizedBox(height: 10),
-                            TextButton(
-                              onPressed: _billing.isPurchasePending
-                                  ? null
-                                  : () {
-                                      _billing.reload();
-                                    },
-                              child: const Text('商品情報を再取得'),
-                            ),
+                            if (product != null) ...[
+                              const SizedBox(height: 10),
+                              TextButton(
+                                onPressed: _billing.isPurchasePending
+                                    ? null
+                                    : () {
+                                        _billing.reload(userInitiated: true);
+                                      },
+                                child: const Text('商品情報を再取得'),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -9533,12 +9671,12 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今回いちばんしたいことは？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              '不安を責めずに伝えたい',
-              '連絡ペースをすり合わせたい',
-              '自分の非を謝って立て直したい',
-              '少し時間を置きたい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -9591,8 +9729,8 @@ List<ThemeQuestion> _buildQuestions({
             options: ['自分', '相手', 'お互い', '事情があって曖昧'],
           ),
           ThemeQuestion(
-            title: '今の気持ちにいちばん近いのは？',
-            options: ['軽く扱われた感じ', '裏切られた感じ', '申し訳なさ', '怒り', '悲しさ', '呆れ'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
         ];
 
@@ -9649,8 +9787,13 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今回はどう着地したいですか？',
-            options: ['感情的にならず話したい', '具体的な分担を決めたい', 'まず謝りたい', '今回は軽めに問題提起したい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -9670,8 +9813,13 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今回いちばんしたいことは？',
-            options: ['役割分担を決めたい', '感謝不足を伝えたい', '責めずに改善したい', '一度ルール化したい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -9747,8 +9895,13 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲れない', 'どちらも正しい気がする', '小さいズレが積もっている'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
             title: '今回の相談でいちばん知りたいのは？',
@@ -9804,17 +9957,17 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今いちばんモヤモヤしているのは？',
-            options: [
-              '嫌われたのか不安',
-              '雑に扱われている感じ',
-              '距離を置かれている感じ',
-              '自分も返せておらず後ろめたい',
-            ],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回いちばんしたいことは？',
-            options: ['重くならずに聞きたい', '不満をやわらかく伝えたい', '自分の非を謝りたい', '今は少し様子を見たい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -9837,8 +9990,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['1対1のLINE', 'グループLINE', '対面', '電話'],
           ),
           ThemeQuestion(
-            title: '今いちばん近い望みは？',
-            options: ['まず謝りたい', '傷ついたことを伝えたい', '関係を悪化させたくない', '少し距離を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -9853,8 +10011,8 @@ List<ThemeQuestion> _buildQuestions({
             options: ['自分', '相手', 'お互い', '事情があって何とも言えない'],
           ),
           ThemeQuestion(
-            title: '今の気持ちに近いものは？',
-            options: ['軽く見られた感じ', '裏切られた感じ', '申し訳なさ', '怒り', '悲しさ', '呆れ'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
         ];
 
@@ -9962,12 +10120,22 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '小さなズレが積もっている'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
-            title: '今回ほしいのは？',
-            options: ['話し合い方の整理', '自分の受け止め方の整理', '距離を保つコツ', '関係を続けるか見極めたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10051,8 +10219,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['親から子へ', '子から親へ', 'お互い', 'はっきりしない'],
           ),
           ThemeQuestion(
-            title: '今いちばん近い望みは？',
-            options: ['まず謝りたい', '傷ついたことを伝えたい', 'これ以上こじらせたくない', '少し冷却期間を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10098,16 +10271,16 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の本音に近いのは？',
-            options: ['悲しい', '腹が立つ', '情けない', 'もう説明したくない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回いちばんしたいことは？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              '信頼してほしいと伝えたい',
-              'まず落ち着いて話したい',
-              '少し距離を取りたい',
-              '期待しすぎない形に整えたい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -10168,8 +10341,13 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今回ほしいのは？',
-            options: ['分担を見直したい', 'まずしんどさを伝えたい', '柔らかく断りたい', '今は距離を取って整えたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10187,21 +10365,16 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の気持ちに近いのは？',
-            options: [
-              '嫌いではないがしんどい',
-              'もっと尊重してほしい',
-              '自分も避けすぎた',
-              'どう関わるのが正解かわからない',
-            ],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              'ちょうどいい距離にしたい',
-              '会い方や頻度を調整したい',
-              '波風立てず距離を取りたい',
-              'まず関係修復を優先したい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -10213,8 +10386,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['働き方・進路', 'お金の使い方', '結婚・子育て観', '礼儀や常識', '家族との距離感', 'その他'],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '違いより伝え方でこじれている'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
             title: '今回いちばんほしいのは？',
@@ -10229,8 +10407,8 @@ List<ThemeQuestion> _buildQuestions({
             options: ['連絡', '言い方', '干渉や信頼', 'お金', '家のこと', '距離感', '価値観'],
           ),
           ThemeQuestion(
-            title: 'しんどさを強く感じているのは？',
-            options: ['自分', '相手', 'お互い', 'まだ整理できていない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
             title: 'いまいちばんしたいことは？',
@@ -10310,12 +10488,12 @@ List<ThemeQuestion> _buildQuestions({
             options: ['兄弟姉妹本人から', '親から', '両方から', 'はっきりしない'],
           ),
           ThemeQuestion(
-            title: '今いちばん近い望みは？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              '比較をやめてほしい',
-              '自分のしんどさを伝えたい',
-              '気にしすぎない整理をしたい',
-              '少し距離を置きたい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -10369,8 +10547,13 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今回ほしいのは？',
-            options: ['分担の見直し', 'しんどさの共有', '断り方の整理', '距離を取る判断'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10388,21 +10571,16 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の本音に近いのは？',
-            options: [
-              '嫌いではないがしんどい',
-              'もっと尊重してほしい',
-              '自分も避けてきた',
-              'どう関わればいいかわからない',
-            ],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              'ちょうどいい距離にしたい',
-              '必要最低限に整えたい',
-              '本音を落ち着いて伝えたい',
-              '今は静かに距離を置きたい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -10414,8 +10592,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['親との関わり方', 'お金の感覚', '働き方', '結婚や子育て', '礼儀や常識', 'その他'],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '違いより言い方で悪化している'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
             title: '今回いちばんほしいのは？',
@@ -10430,8 +10613,8 @@ List<ThemeQuestion> _buildQuestions({
             options: ['言い方', '親を挟んだ問題', '比較', 'お金', '役割分担', '距離感', '価値観'],
           ),
           ThemeQuestion(
-            title: 'しんどさを強く感じているのは？',
-            options: ['自分', '相手', 'お互い', 'まだ整理できていない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
             title: '今回はどうしたいですか？',
@@ -10462,8 +10645,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['義母', '義父', '義兄弟姉妹', '複数'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
-            options: ['角を立てず整えたい', '傷ついたことは伝えたい', '配偶者にも理解してほしい', '少し距離を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10509,13 +10697,8 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: 'いちばん近い気持ちは？',
-            options: [
-              '善意でもしんどい',
-              '自分たちの領域に入られている感じ',
-              '否定されている感じ',
-              '自分も言い返せず溜めている',
-            ],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
             title: '今回目指したいのは？',
@@ -10598,21 +10781,16 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の本音に近いのは？',
-            options: [
-              '嫌いではないが負担',
-              'もっと尊重してほしい',
-              '配偶者にわかってほしい',
-              'どう整えるのが平和かわからない',
-            ],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
+            title: 'この問題はどんな出方をしていますか？',
             options: [
-              'ちょうどいい距離にしたい',
-              '会い方や頻度を調整したい',
-              'まず夫婦で足並みを揃えたい',
-              '少し距離を置きたい',
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
             ],
           ),
         ];
@@ -10624,12 +10802,12 @@ List<ThemeQuestion> _buildQuestions({
             options: ['家族優先の度合い', '子育て観', 'お金の感覚', '礼儀や常識', '夫婦の役割観', 'その他'],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
+            title: 'ズレの構図として近いのは？',
             options: [
-              '自分が譲れない',
-              '相手側が譲らない',
-              'どちらも悪くないが合わない',
-              '配偶者を挟むことで悪化している',
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
             ],
           ),
           ThemeQuestion(
@@ -10672,8 +10850,8 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: 'いちばん近い気持ちは？',
-            options: ['負担が大きい', '大事にされていない感じ', '距離を置かれている感じ', '自分も返せておらず後ろめたい'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
             title: '今回はどう整えたいですか？',
@@ -10700,8 +10878,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['LINE・電話', '対面', '家族の集まり', '複数人の前'],
           ),
           ThemeQuestion(
-            title: '今いちばん近い望みは？',
-            options: ['謝りたい', '傷ついたことを伝えたい', '悪化させたくない', '少し離れたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10723,8 +10906,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['信用されていない感じ', '距離が近すぎる感じ', '自分の領域が守られない感じ', '自分も説明不足だった'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
-            options: ['線引きを伝えたい', '角を立てず断りたい', '少し距離を置きたい', '自分の整理をしたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10786,8 +10974,8 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: '今の本音に近いのは？',
-            options: ['嫌いではないが負担', 'もっと尊重してほしい', '自分も見直したい', 'どう整えるのがよいかわからない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
             title: '今回はどうしたいですか？',
@@ -10802,8 +10990,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['お金の感覚', '働き方', '家族との関わり方', '礼儀や常識', '将来観', 'その他'],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '違いより伝え方で悪化している'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
             title: '今回いちばんほしいのは？',
@@ -10818,12 +11011,17 @@ List<ThemeQuestion> _buildQuestions({
             options: ['連絡', '言い方', '干渉や信頼', 'お金', '家のこと', '距離感', '価値観'],
           ),
           ThemeQuestion(
-            title: 'しんどさを強く感じているのは？',
-            options: ['自分', '相手', 'お互い', 'まだ整理できていない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今いちばんしたいことは？',
-            options: ['謝りたい', '誤解をほどきたい', '関係を整えたい', '少し距離を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
     }
@@ -10874,8 +11072,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['LINE・チャット', '電話', '対面', '人前・グループ内'],
           ),
           ThemeQuestion(
-            title: '今いちばん近い望みは？',
-            options: ['まず謝りたい', '傷ついたことを伝えたい', '今後の関わり方を整えたい', '少し距離を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10890,8 +11093,13 @@ List<ThemeQuestion> _buildQuestions({
             options: ['自分が守れなかった', '相手が守らなかった', 'お互いに認識がズレていた', 'まだよくわからない'],
           ),
           ThemeQuestion(
-            title: '今回はどう着地させたいですか？',
-            options: ['まず謝って整えたい', '認識のズレを解きたい', '今後のルールを作りたい', '今回は深追いせず収めたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10909,12 +11117,17 @@ List<ThemeQuestion> _buildQuestions({
             ],
           ),
           ThemeQuestion(
-            title: 'いちばん近い気持ちは？',
-            options: ['尊重してほしい', 'もう少し自然に接したい', '自分も反省がある', 'どう整えるのが正解かわからない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今回は何を目指したいですか？',
-            options: ['ちょうどいい距離にしたい', '関係を悪化させたくない', '本音を少し伝えたい', '必要最低限にしたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10953,12 +11166,22 @@ List<ThemeQuestion> _buildQuestions({
             options: ['仕事や優先順位', '時間感覚', 'お金の使い方', '礼儀や常識', '人との距離感', 'その他'],
           ),
           ThemeQuestion(
-            title: '今の状態に近いのは？',
-            options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '違いより伝え方で悪化している'],
+            title: 'ズレの構図として近いのは？',
+            options: [
+              '自分と相手の期待が違う',
+              '役割や境界線が曖昧',
+              '話す前から認識がズレている',
+              '小さなズレが積み重なっている',
+            ],
           ),
           ThemeQuestion(
-            title: '今回ほしいのは？',
-            options: ['話し方の整理', '線引きの明確化', '自分の受け止め方の整理', '少し距離を置く判断'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
 
@@ -10969,12 +11192,17 @@ List<ThemeQuestion> _buildQuestions({
             options: ['連絡', '言い方', '約束', '距離感', 'お金', '価値観', 'まだ言語化しにくい'],
           ),
           ThemeQuestion(
-            title: 'しんどさを強く感じているのは？',
-            options: ['自分', '相手', 'お互い', 'まだ整理できていない'],
+            title: '引っかかりはどこに出ていますか？',
+            options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
           ),
           ThemeQuestion(
-            title: '今いちばんしたいことは？',
-            options: ['謝りたい', '誤解を解きたい', '関係を整えたい', '少し距離を置きたい'],
+            title: 'この問題はどんな出方をしていますか？',
+            options: [
+              '単発の出来事として出ている',
+              '前から何度か繰り返している',
+              '相手との認識のズレとして出ている',
+              '他の不満も重なっている',
+            ],
           ),
         ];
     }
@@ -11015,8 +11243,8 @@ List<ThemeQuestion> _buildQuestions({
         options: ['自分', '相手', 'お互い', 'はっきりしない'],
       ),
       ThemeQuestion(
-        title: '今の気持ちに近いものはどれですか？',
-        options: ['裏切られた感じ', '軽く扱われた感じ', '申し訳なさ', '怒り', '悲しさ'],
+        title: '引っかかりはどこに出ていますか？',
+        options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
       ),
     ];
   }
@@ -11035,8 +11263,8 @@ List<ThemeQuestion> _buildQuestions({
         ],
       ),
       ThemeQuestion(
-        title: 'いちばん近い気持ちは？',
-        options: ['不安', '怒り', '寂しさ', '申し訳なさ', '混乱'],
+        title: '引っかかりはどこに出ていますか？',
+        options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
       ),
       ThemeQuestion(
         title: '今回はどうしたいですか？',
@@ -11069,12 +11297,17 @@ List<ThemeQuestion> _buildQuestions({
         options: ['近すぎる', '遠すぎる', '踏み込まれすぎる', '必要な時だけ近い', '自分も避けすぎた', 'その他'],
       ),
       ThemeQuestion(
-        title: '今の本音に近いのは？',
-        options: ['尊重してほしい', '関係を少し整えたい', '自分も反省がある', '正解がわからない'],
+        title: '引っかかりはどこに出ていますか？',
+        options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
       ),
       ThemeQuestion(
-        title: '今回は何を目指したいですか？',
-        options: ['ちょうどいい距離にしたい', '本音を少し伝えたい', '必要最低限にしたい', '少し距離を置きたい'],
+        title: 'この問題はどんな出方をしていますか？',
+        options: [
+          '単発の出来事として出ている',
+          '前から何度か繰り返している',
+          '相手との認識のズレとして出ている',
+          '他の不満も重なっている',
+        ],
       ),
     ];
   }
@@ -11086,12 +11319,22 @@ List<ThemeQuestion> _buildQuestions({
         options: ['時間感覚', 'お金の感覚', '礼儀や常識', '優先順位', '人との距離感', 'その他'],
       ),
       ThemeQuestion(
-        title: '今の状態に近いのは？',
-        options: ['自分が譲れない', '相手が譲らない', 'どちらも悪くないが合わない', '違いより伝え方で悪化している'],
+        title: 'ズレの構図として近いのは？',
+        options: [
+          '自分と相手の期待が違う',
+          '役割や境界線が曖昧',
+          '話す前から認識がズレている',
+          '小さなズレが積み重なっている',
+        ],
       ),
       ThemeQuestion(
-        title: '今回ほしいのは？',
-        options: ['話し方の整理', '線引きの明確化', '自分の整理', '距離を置く判断'],
+        title: 'この問題はどんな出方をしていますか？',
+        options: [
+          '単発の出来事として出ている',
+          '前から何度か繰り返している',
+          '相手との認識のズレとして出ている',
+          '他の不満も重なっている',
+        ],
       ),
     ];
   }
@@ -11103,12 +11346,17 @@ List<ThemeQuestion> _buildQuestions({
         options: ['連絡', '言い方', '約束', 'お金', '距離感', '価値観', 'まだ言語化しにくい'],
       ),
       ThemeQuestion(
-        title: 'しんどさを強く感じているのは？',
-        options: ['自分', '相手', 'お互い', 'まだ整理できていない'],
+        title: '引っかかりはどこに出ていますか？',
+        options: ['相手の言動そのもの', '自分の受け止め方', 'お互いの言い方やタイミング', '周囲や過去の積み重なり'],
       ),
       ThemeQuestion(
-        title: '今どうしたいですか？',
-        options: ['謝りたい', '誤解を解きたい', '関係を整えたい', '少し距離を置きたい'],
+        title: 'この問題はどんな出方をしていますか？',
+        options: [
+          '単発の出来事として出ている',
+          '前から何度か繰り返している',
+          '相手との認識のズレとして出ている',
+          '他の不満も重なっている',
+        ],
       ),
     ];
   }
@@ -11123,8 +11371,13 @@ List<ThemeQuestion> _buildQuestions({
       options: ['自分', '相手', 'お互い', 'わからない'],
     ),
     ThemeQuestion(
-      title: '今どうしたいですか？',
-      options: ['謝りたい', '誤解を解きたい', '落ち着かせたい', '距離を置きたい'],
+      title: 'この問題はどんな出方をしていますか？',
+      options: [
+        '単発の出来事として出ている',
+        '前から何度か繰り返している',
+        '相手との認識のズレとして出ている',
+        '他の不満も重なっている',
+      ],
     ),
   ];
 }
